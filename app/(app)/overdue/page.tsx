@@ -13,13 +13,35 @@ export default function OverduePage() {
 
   async function loadOverdue() {
     const db = createClient()
-    const { data } = await db
+    const { data: ledgerData } = await db
       .from('monthly_ledger')
-      .select('*, members(full_name, phone), groups(group_name)')
+      .select('*')
       .eq('status', 'Overdue')
       .order('balance', { ascending: false })
 
-    setOverdueList(data || [])
+    if (!ledgerData?.length) { setOverdueList([]); setLoading(false); return }
+
+    // Fetch member and group names separately
+    const memberIds = [...new Set(ledgerData.map(l => l.member_id))]
+    const groupIds = [...new Set(ledgerData.map(l => l.group_id))]
+
+    const [{ data: membersData }, { data: groupsData }] = await Promise.all([
+      db.from('members').select('member_id,full_name,phone').in('member_id', memberIds),
+      db.from('groups').select('group_id,group_name').in('group_id', groupIds),
+    ])
+
+    const memberMap: Record<string, any> = {}
+    const groupMap: Record<string, any> = {}
+    ;(membersData || []).forEach((m: any) => { memberMap[m.member_id] = m })
+    ;(groupsData || []).forEach((g: any) => { groupMap[g.group_id] = g })
+
+    const enriched = ledgerData.map(l => ({
+      ...l,
+      members: memberMap[l.member_id] || null,
+      groups: groupMap[l.group_id] || null,
+    }))
+
+    setOverdueList(enriched)
     setLoading(false)
   }
 

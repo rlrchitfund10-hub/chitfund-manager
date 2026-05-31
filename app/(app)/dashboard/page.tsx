@@ -44,38 +44,46 @@ export default function DashboardPage() {
 
   async function loadDashboard() {
     const db = createClient()
-    const currentMonth = new Date().getMonth() + 1
-    const currentYear = new Date().getFullYear()
 
-    // Get all active groups
-    const { data: groups } = await db.from('groups').select('*').eq('status', 'Active')
-    // Get monthly ledger for current month
-    const { data: ledger } = await db.from('monthly_ledger').select('*').eq('status', 'Overdue')
-    // Get all ledger entries for this month across groups
-    const { data: thisMonthLedger } = await db
-      .from('monthly_ledger')
-      .select('*,groups(group_name)')
-    // Get today's payments
-    const todayStr = new Date().toISOString().split('T')[0]
-    const { data: todayPayments } = await db
-      .from('payments')
-      .select('payment_id,amount,payment_mode,payment_date,member_id,members(full_name)')
-      .order('created_at', { ascending: false })
-      .limit(5)
-    // Get pending payouts
-    const { data: pendingPayouts } = await db
-      .from('auctions')
-      .select('auction_id,net_payout,group_id,winner_member_id,groups(group_name),members!auctions_winner_member_id_fkey(full_name)')
-      .eq('payout_status', 'Pending')
-    // Get paid amounts from auctions for float calculation
-    const { data: allAuctions } = await db
-      .from('auctions')
-      .select('net_payout,payout_status,group_id')
-      .eq('payout_status', 'Pending')
+    // Fetch all base data without FK joins
+    const [
+      { data: groups },
+      { data: ledger },
+      { data: thisMonthLedger },
+      { data: recentPaymentsRaw },
+      { data: pendingPayoutsRaw },
+    ] = await Promise.all([
+      db.from('groups').select('*').eq('status', 'Active'),
+      db.from('monthly_ledger').select('member_id,balance').eq('status', 'Overdue'),
+      db.from('monthly_ledger').select('group_id,paid_amount,expected_amount'),
+      db.from('payments').select('payment_id,amount,payment_mode,payment_date,member_id')
+        .order('created_at', { ascending: false }).limit(5),
+      db.from('auctions').select('auction_id,net_payout,group_id,winner_member_id')
+        .eq('payout_status', 'Pending'),
+    ])
+
+    // Fetch member names for recent payments
+    const paymentMemberIds = [...new Set((recentPaymentsRaw || []).map((p: any) => p.member_id))]
+    const auctionMemberIds = [...new Set((pendingPayoutsRaw || []).map((a: any) => a.winner_member_id))]
+    const allMemberIds = [...new Set([...paymentMemberIds, ...auctionMemberIds])]
+
+    let memberNameMap: Record<string, string> = {}
+    if (allMemberIds.length > 0) {
+      const { data: membersData } = await db.from('members').select('member_id,full_name').in('member_id', allMemberIds)
+      ;(membersData || []).forEach((m: any) => { memberNameMap[m.member_id] = m.full_name })
+    }
+
+    // Fetch group names for auctions
+    const auctionGroupIds = [...new Set((pendingPayoutsRaw || []).map((a: any) => a.group_id))]
+    let groupNameMap: Record<string, string> = {}
+    if (auctionGroupIds.length > 0) {
+      const { data: groupsData } = await db.from('groups').select('group_id,group_name').in('group_id', auctionGroupIds)
+      ;(groupsData || []).forEach((g: any) => { groupNameMap[g.group_id] = g.group_name })
+    }
 
     // Calculate metrics
-    const overdueAmount = (ledger || []).reduce((s, r) => s + Number(r.balance), 0)
-    const totalFloat = (allAuctions || []).reduce((s, r) => s + Number(r.net_payout || 0), 0)
+    const overdueAmount = (ledger || []).reduce((s: number, r: any) => s + Number(r.balance), 0)
+    const totalFloat = (pendingPayoutsRaw || []).reduce((s: number, r: any) => s + Number(r.net_payout || 0), 0)
 
     // Group-wise collection
     const groupStats = (groups || []).map(g => {
@@ -83,35 +91,29 @@ export default function DashboardPage() {
       const collected = gLedger.reduce((s: number, l: any) => s + Number(l.paid_amount), 0)
       const expected = gLedger.reduce((s: number, l: any) => s + Number(l.expected_amount), 0)
       return {
-        group_id: g.group_id,
-        group_name: g.group_name,
-        collected,
-        expected,
+        group_id: g.group_id, group_name: g.group_name, collected, expected,
         pct: expected > 0 ? Math.round((collected / expected) * 100) : 0,
       }
     })
 
-    const totalCollected = groupStats.reduce((s, g) => s + g.collected, 0)
-    const totalExpected = groupStats.reduce((s, g) => s + g.expected, 0)
-
     setData({
       totalFloat,
-      thisMonthCollected: totalCollected,
-      thisMonthExpected: totalExpected,
+      thisMonthCollected: groupStats.reduce((s, g) => s + g.collected, 0),
+      thisMonthExpected: groupStats.reduce((s, g) => s + g.expected, 0),
       overdueCount: (ledger || []).length,
       overdueAmount,
       groups: groupStats,
-      recentPayments: (todayPayments || []).map((p: any) => ({
+      recentPayments: (recentPaymentsRaw || []).map((p: any) => ({
         payment_id: p.payment_id,
-        full_name: p.members?.full_name || 'Unknown',
+        full_name: memberNameMap[p.member_id] || 'Unknown',
         amount: Number(p.amount),
         payment_mode: p.payment_mode,
         payment_date: p.payment_date,
       })),
-      pendingPayouts: (pendingPayouts || []).map((a: any) => ({
+      pendingPayouts: (pendingPayoutsRaw || []).map((a: any) => ({
         auction_id: a.auction_id,
-        group_name: a.groups?.group_name || '',
-        winner_name: a.members?.full_name || '',
+        group_name: groupNameMap[a.group_id] || '',
+        winner_name: memberNameMap[a.winner_member_id] || '',
         net_payout: Number(a.net_payout || 0),
       })),
     })

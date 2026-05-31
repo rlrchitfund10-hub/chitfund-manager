@@ -17,12 +17,19 @@ export default function HistoryPage() {
   async function loadPayments() {
     setLoading(true)
     const db = createClient()
-    const { data } = await db
-      .from('payments')
-      .select('*, members(full_name, member_id)')
+    const { data: paymentsRaw } = await db
+      .from('payments').select('*')
       .order('created_at', { ascending: false })
       .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
-    setPayments(data || [])
+
+    if (!paymentsRaw?.length) { setPayments([]); setLoading(false); return }
+
+    const memberIds = [...new Set(paymentsRaw.map(p => p.member_id))]
+    const { data: membersData } = await db.from('members').select('member_id,full_name').in('member_id', memberIds)
+    const memberMap: Record<string, any> = {}
+    ;(membersData || []).forEach((m: any) => { memberMap[m.member_id] = m })
+
+    setPayments(paymentsRaw.map(p => ({ ...p, members: memberMap[p.member_id] || null })))
     setLoading(false)
   }
 

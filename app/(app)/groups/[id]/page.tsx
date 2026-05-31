@@ -41,22 +41,41 @@ export default function GroupDetailPage() {
     setGroup(groupData)
 
     const monthNo = getCurrentMonthNo(groupData.start_date)
+
+    // Fetch slots, ledger, auction separately (avoid unreliable FK joins)
     const [{ data: slotsData }, { data: ledgerData }, { data: auctionData }] = await Promise.all([
-      db.from('member_slots').select('*, members(full_name, phone, member_id)')
-        .eq('group_id', id).order('status').order('created_at'),
+      db.from('member_slots').select('*').eq('group_id', id).order('created_at'),
       db.from('monthly_ledger').select('*').eq('group_id', id).eq('month_no', monthNo),
-      db.from('auctions').select('*, members!auctions_winner_member_id_fkey(full_name)')
-        .eq('group_id', id).eq('month_no', monthNo).single(),
+      db.from('auctions').select('*').eq('group_id', id).eq('month_no', monthNo).single(),
     ])
 
-    const enriched = (slotsData || []).map(slot => {
+    // Fetch member details separately
+    const memberIds = (slotsData || []).map((s: any) => s.member_id)
+    let membersMap: Record<string, any> = {}
+    if (memberIds.length > 0) {
+      const { data: membersData } = await db
+        .from('members').select('member_id, full_name, phone')
+        .in('member_id', memberIds)
+      ;(membersData || []).forEach((m: any) => { membersMap[m.member_id] = m })
+    }
+
+    // Fetch auction winner name separately
+    let auctionWithWinner = auctionData
+    if (auctionData?.winner_member_id) {
+      const { data: winnerData } = await db
+        .from('members').select('full_name')
+        .eq('member_id', auctionData.winner_member_id).single()
+      auctionWithWinner = { ...auctionData, winner_name: winnerData?.full_name }
+    }
+
+    const enriched = (slotsData || []).map((slot: any) => {
       const led = (ledgerData || []).find((l: any) => l.member_id === slot.member_id)
-      return { ...slot, ledger: led }
+      return { ...slot, members: membersMap[slot.member_id] || null, ledger: led }
     })
 
     setMembers(enriched)
     setLedger(ledgerData || [])
-    setAuction(auctionData)
+    setAuction(auctionWithWinner)
     setLoading(false)
   }
 
@@ -415,7 +434,7 @@ export default function GroupDetailPage() {
                 </span>
               </div>
               <div className="grid grid-cols-2 gap-3 text-sm">
-                <div><p className="text-gray-500">Winner</p><p className="font-medium">{auction.members?.full_name}</p></div>
+                <div><p className="text-gray-500">Winner</p><p className="font-medium">{auction.winner_name}</p></div>
                 <div><p className="text-gray-500">Bid</p><p className="font-medium">{formatCurrency(auction.bid_amount)}</p></div>
                 <div><p className="text-gray-500">Commission</p><p className="font-medium">{formatCurrency(auction.admin_commission)}</p></div>
                 <div><p className="text-gray-500">New Installment</p><p className="font-bold text-indigo-700">{formatCurrency(auction.actual_installment)}</p></div>

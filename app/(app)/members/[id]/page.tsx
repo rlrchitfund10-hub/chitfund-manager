@@ -31,17 +31,29 @@ export default function MemberProfilePage() {
       { data: auctionsData },
     ] = await Promise.all([
       db.from('members').select('*').eq('member_id', memberId).single(),
-      db.from('member_slots').select('*, groups(*)').eq('member_id', memberId).order('created_at'),
-      db.from('monthly_ledger').select('*, groups(group_name)').eq('member_id', memberId).order('month_no', { ascending: false }),
+      db.from('member_slots').select('*').eq('member_id', memberId).order('created_at'),
+      db.from('monthly_ledger').select('*').eq('member_id', memberId).order('month_no', { ascending: false }),
       db.from('payments').select('*').eq('member_id', memberId).order('created_at', { ascending: false }).limit(50),
-      db.from('auctions').select('*, groups(group_name)').or(`winner_member_id.eq.${memberId},winner2_member_id.eq.${memberId}`).order('created_at', { ascending: false }),
+      db.from('auctions').select('*').or(`winner_member_id.eq.${memberId},winner2_member_id.eq.${memberId}`).order('created_at', { ascending: false }),
     ])
 
+    // Fetch group names separately
+    const groupIds = [...new Set([
+      ...(slotsData || []).map((s: any) => s.group_id),
+      ...(ledgerData || []).map((l: any) => l.group_id),
+      ...(auctionsData || []).map((a: any) => a.group_id),
+    ])]
+    let groupMap: Record<string, string> = {}
+    if (groupIds.length > 0) {
+      const { data: groupsData } = await db.from('groups').select('group_id,group_name').in('group_id', groupIds)
+      ;(groupsData || []).forEach((g: any) => { groupMap[g.group_id] = g.group_name })
+    }
+
     setMember(memberData)
-    setSlots(slotsData || [])
-    setLedger(ledgerData || [])
+    setSlots((slotsData || []).map((s: any) => ({ ...s, groups: { group_name: groupMap[s.group_id] || s.group_id } })))
+    setLedger((ledgerData || []).map((l: any) => ({ ...l, groups: { group_name: groupMap[l.group_id] || l.group_id } })))
     setPayments(paymentsData || [])
-    setAuctions(auctionsData || [])
+    setAuctions((auctionsData || []).map((a: any) => ({ ...a, groups: { group_name: groupMap[a.group_id] || a.group_id } })))
     setLoading(false)
   }
 
