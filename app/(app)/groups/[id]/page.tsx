@@ -448,12 +448,11 @@ export default function GroupDetailPage() {
                       <span className="font-bold">Net Payout</span>
                       <span className="font-bold text-xl">{formatCurrency(a.net_payout)}</span>
                     </div>
-                    <button
-                      onClick={() => setEditingAuction({ ...a })}
-                      className="w-full border border-indigo-600 text-indigo-600 py-2 rounded-xl text-sm font-medium"
-                    >
-                      ✏️ Edit This Auction
-                    </button>
+                    <Link href={`/auctions/${a.auction_id}`}>
+                      <button className="w-full border border-indigo-600 text-indigo-600 py-2 rounded-xl text-sm font-medium">
+                        ✏️ Edit This Auction — Full Form
+                      </button>
+                    </Link>
                   </div>
                 )}
 
