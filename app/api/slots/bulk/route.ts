@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { generateId, getCurrentMonthNo } from '@/lib/utils'
+import { generateId } from '@/lib/utils'
+import { createAllLedgerEntries } from '../route'
 
 export async function POST(req: NextRequest) {
   const db = createAdminClient()
   try {
     const { group_id, members } = await req.json()
-    // members: [{ member_id, slot_count }]
 
     if (!group_id || !members?.length) {
       return NextResponse.json({ error: 'Missing group_id or members' }, { status: 400 })
@@ -15,12 +15,10 @@ export async function POST(req: NextRequest) {
     const { data: group } = await db.from('groups').select('*').eq('group_id', group_id).single()
     if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
 
-    const monthNo = getCurrentMonthNo(group.start_date)
-    const monthYear = `${new Date().getMonth() + 1}/${new Date().getFullYear()}`
     const results = []
 
     for (const m of members) {
-      // Check if slot already exists
+      // Skip if already in group
       const { data: existing } = await db
         .from('member_slots').select('slot_id')
         .eq('member_id', m.member_id).eq('group_id', group_id).single()
@@ -37,26 +35,8 @@ export async function POST(req: NextRequest) {
       })
       if (slotErr) { results.push({ member_id: m.member_id, error: slotErr.message }); continue }
 
-      // Check if ledger entry exists
-      const { data: ledgerExisting } = await db
-        .from('monthly_ledger').select('ledger_id')
-        .eq('member_id', m.member_id).eq('group_id', group_id).eq('month_no', monthNo).single()
-
-      if (!ledgerExisting) {
-        const { data: auction } = await db
-          .from('auctions').select('actual_installment')
-          .eq('group_id', group_id).eq('month_no', monthNo).single()
-        const installment = auction?.actual_installment
-          ? Number(auction.actual_installment)
-          : Number(group.base_installment)
-        const expected = installment * parseFloat(m.slot_count)
-        await db.from('monthly_ledger').insert({
-          ledger_id: generateId('LED'),
-          member_id: m.member_id, group_id, month_no: monthNo,
-          expected_amount: expected, paid_amount: 0, balance: expected,
-          status: 'Pending', month_year: monthYear,
-        })
-      }
+      // Create ledger entries for ALL months (historical + current)
+      await createAllLedgerEntries(db, m.member_id, group_id, parseFloat(m.slot_count), group)
 
       results.push({ member_id: m.member_id, slot_id: slotId, success: true })
     }
