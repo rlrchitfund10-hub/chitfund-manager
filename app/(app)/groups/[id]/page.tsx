@@ -163,6 +163,13 @@ export default function GroupDetailPage() {
     await loadGroup()
   }
 
+  async function removeMember(slotId: string) {
+    if (!confirm('Remove this member from the group?')) return
+    const res = await fetch(`/api/slots/${slotId}`, { method: 'DELETE' })
+    if (res.ok) await loadGroup()
+    else alert('Failed to remove member')
+  }
+
   if (loading) return <div className="flex justify-center items-center min-h-[60vh] text-gray-400">Loading...</div>
   if (!group) return <div className="p-4 text-red-500">Group not found</div>
 
@@ -181,9 +188,14 @@ export default function GroupDetailPage() {
     <div className="pb-8">
       {/* Header */}
       <div className="bg-purple-600 text-white p-4 pb-6">
-        <div className="flex items-center gap-3 mb-3">
-          <button onClick={() => router.back()} className="text-purple-200 text-xl">←</button>
-          <span className="text-sm text-purple-200">Group Detail</span>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-3">
+            <button onClick={() => router.back()} className="text-purple-200 text-xl">←</button>
+            <span className="text-sm text-purple-200">Group Detail</span>
+          </div>
+          <Link href={`/groups/${id}/edit`}>
+            <button className="text-xs bg-white/20 hover:bg-white/30 text-white px-3 py-1.5 rounded-lg">✏️ Edit</button>
+          </Link>
         </div>
         <h2 className="text-2xl font-bold">{group.group_name}</h2>
         <p className="text-purple-200 text-sm mt-1">
@@ -385,8 +397,8 @@ export default function GroupDetailPage() {
               </div>
             ) : (
               members.map(slot => (
-                <Link key={slot.slot_id} href={`/members/${slot.member_id}`}>
-                  <div className="flex items-center px-4 py-3 border-b border-gray-50 last:border-0 active:bg-gray-50 gap-3">
+                <div key={slot.slot_id} className="flex items-center px-4 py-3 border-b border-gray-50 last:border-0 gap-3">
+                  <Link href={`/members/${slot.member_id}`} className="flex items-center gap-3 flex-1 min-w-0">
                     {/* Avatar */}
                     <div className="w-9 h-9 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-700 font-bold text-sm flex-shrink-0">
                       {slot.members?.full_name?.charAt(0)}
@@ -413,8 +425,16 @@ export default function GroupDetailPage() {
                         </>
                       )}
                     </div>
-                  </div>
-                </Link>
+                  </Link>
+                  {/* Remove button */}
+                  <button
+                    onClick={() => removeMember(slot.slot_id)}
+                    className="text-gray-300 hover:text-red-500 px-2 py-1 text-xs flex-shrink-0"
+                    title="Remove from group"
+                  >
+                    ✕
+                  </button>
+                </div>
               ))
             )}
           </div>

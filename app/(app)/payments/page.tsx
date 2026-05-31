@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { formatCurrency, calculateSplit, getCurrentMonthNo } from '@/lib/utils'
 import type { Member } from '@/lib/types'
@@ -35,6 +35,7 @@ export default function RecordPaymentPage() {
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState('')
   const [step, setStep] = useState<'search' | 'amount' | 'confirm'>('search')
+  const [monthOverride, setMonthOverride] = useState('')
 
   useEffect(() => {
     if (search.length < 2) { setMembers([]); return }
@@ -136,7 +137,7 @@ export default function RecordPaymentPage() {
           paymentMode: mode,
           notes,
           splitPreview,
-          monthNo: groupBalances[0]?.month_no || new Date().getMonth() + 1,
+          monthNo: monthOverride ? parseInt(monthOverride) : (groupBalances[0]?.month_no || new Date().getMonth() + 1),
         }),
       })
       const result = await res.json()
@@ -149,6 +150,7 @@ export default function RecordPaymentPage() {
         setSelectedMember(null)
         setAmount('')
         setNotes('')
+        setMonthOverride('')
         setSplitPreview([])
         setGroupBalances([])
         setStep('search')
@@ -283,15 +285,30 @@ export default function RecordPaymentPage() {
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Notes (optional)</label>
-            <input
-              type="text"
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-              placeholder="Any notes..."
-              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50"
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Notes (optional)</label>
+              <input
+                type="text"
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                placeholder="Any notes..."
+                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Month No <span className="text-gray-400 text-xs">(leave blank = current)</span>
+              </label>
+              <input
+                type="number"
+                min="1"
+                value={monthOverride}
+                onChange={e => setMonthOverride(e.target.value)}
+                placeholder="e.g. 1 for April"
+                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50"
+              />
+            </div>
           </div>
         </div>
       )}

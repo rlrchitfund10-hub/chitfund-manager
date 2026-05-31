@@ -20,6 +20,7 @@ function AuctionForm() {
     bid_amount: '',
     deduction_amount: '0',
     auction_date: new Date().toISOString().split('T')[0],
+    month_no_override: '',
     winner2_member_id: '',
     winner1_payout: '',
     winner2_payout: '',
@@ -126,7 +127,8 @@ function AuctionForm() {
   async function handleSave() {
     if (!selectedGroup || !form.winner_member_id || !form.bid_amount) return
     setSaving(true)
-    const monthNo = groupDetails ? getCurrentMonthNo(groupDetails.start_date) : 1
+    const autoMonthNo = groupDetails ? getCurrentMonthNo(groupDetails.start_date) : 1
+    const monthNo = form.month_no_override ? parseInt(form.month_no_override) : autoMonthNo
 
     const res = await fetch('/api/auctions', {
       method: 'POST',
@@ -194,12 +196,26 @@ function AuctionForm() {
           </div>
         )}
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Auction Date</label>
-          <input
-            type="date" value={form.auction_date} onChange={e => update('auction_date', e.target.value)}
-            className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 text-sm"
-          />
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Auction Date</label>
+            <input
+              type="date" value={form.auction_date} onChange={e => update('auction_date', e.target.value)}
+              className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Month No <span className="text-gray-400">(auto: {groupDetails ? getCurrentMonthNo(groupDetails.start_date) : '-'})</span>
+            </label>
+            <input
+              type="number" min="1"
+              value={form.month_no_override}
+              onChange={e => update('month_no_override', e.target.value)}
+              placeholder="Override month"
+              className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 text-sm"
+            />
+          </div>
         </div>
 
         <div>
