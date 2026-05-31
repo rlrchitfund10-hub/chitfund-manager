@@ -263,73 +263,74 @@ function AuctionForm() {
           />
         </div>
 
-        {/* Saved from last month */}
-        {savedFromLastMonth > 0 && (
-          <div className="flex items-center justify-between bg-blue-50 rounded-xl px-4 py-2.5 text-sm">
-            <span className="text-blue-700">+ Saved Commission (from last month)</span>
-            <span className="font-bold text-blue-700">{formatCurrency(savedFromLastMonth)}</span>
-          </div>
-        )}
+        {/* Saved Commission display */}
+        <div className={`flex items-center justify-between rounded-xl px-4 py-2.5 text-sm ${savedFromLastMonth > 0 ? 'bg-blue-50' : 'bg-gray-50'}`}>
+          <span className={savedFromLastMonth > 0 ? 'text-blue-700' : 'text-gray-500'}>
+            + Saved Commission (from last month)
+          </span>
+          <span className={`font-bold ${savedFromLastMonth > 0 ? 'text-blue-700' : 'text-gray-400'}`}>
+            {formatCurrency(savedFromLastMonth)}
+          </span>
+        </div>
 
-        {/* Calculation breakdown — only when bid is entered */}
-        {bid > 0 && groupDetails && (
-          <div className="bg-gray-50 rounded-xl p-3 space-y-2 border border-gray-200">
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Total Available</span>
-              <span className="font-medium">{formatCurrency(totalAvailable)}</span>
-            </div>
-            <div className="flex justify-between text-sm border-t border-gray-200 pt-2">
-              <span className="text-gray-600">− Admin Commission ({groupDetails.commission_pct}%)</span>
-              <span className="font-medium text-red-500">−{formatCurrency(adminCommission)}</span>
-            </div>
-            <div className="flex justify-between text-sm font-semibold border-t border-gray-200 pt-2">
-              <span className="text-gray-700">= Net Pool</span>
-              <span className="text-gray-800">{formatCurrency(netPool)}</span>
-            </div>
-          </div>
-        )}
-
-        {/* Shared Discount — admin entry */}
+        {/* Shared Discount — immediately after saved commission */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Shared Discount (₹) * <span className="text-gray-400 text-xs">— amount you decide to share with all members</span>
+            Shared Discount (₹) * <span className="text-gray-400 text-xs">— you decide how much to share</span>
           </label>
           <input
             type="number" value={form.shared_discount} onChange={e => update('shared_discount', e.target.value)}
             placeholder="Enter amount to share"
-            className="w-full px-4 py-3 border border-indigo-200 rounded-xl bg-indigo-50 text-sm font-medium"
+            className="w-full px-4 py-3 border-2 border-indigo-300 rounded-xl bg-indigo-50 text-sm font-medium"
           />
           {sharedDiscount > 0 && groupDetails && (
-            <p className="text-xs text-indigo-600 mt-1">
-              Each member gets: {formatCurrency(discountPerSlot)} discount per slot
+            <p className="text-xs text-indigo-600 mt-1.5 font-medium">
+              Each member discount: {formatCurrency(discountPerSlot)} per slot
             </p>
           )}
         </div>
 
-        {/* Results */}
-        {canCalculate && (
-          <div className="space-y-2">
-            {/* Saved for next month */}
-            <div className={`flex justify-between items-center rounded-xl px-4 py-3 ${savedForNext >= 0 ? 'bg-green-50' : 'bg-red-50'}`}>
-              <div>
-                <p className={`text-sm font-semibold ${savedForNext >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                  Saved Commission → Next Month
-                </p>
-                <p className="text-xs text-gray-500">Carries forward to Month {(form.month_no_override ? parseInt(form.month_no_override) : Number(autoMonthNo)) + 1}</p>
-              </div>
-              <span className={`font-bold text-lg ${savedForNext >= 0 ? 'text-green-700' : 'text-red-600'}`}>
-                {formatCurrency(savedForNext)}
-              </span>
+        {/* Full calculation breakdown */}
+        {bid > 0 && groupDetails && (
+          <div className="bg-gray-50 rounded-xl p-3 space-y-1.5 border border-gray-200 text-sm">
+            <div className="flex justify-between">
+              <span className="text-gray-500">Bid Amount</span>
+              <span className="font-medium">{formatCurrency(bid)}</span>
             </div>
-
-            {/* Gross payout */}
-            <div className="flex justify-between items-center bg-gray-50 rounded-xl px-4 py-2.5">
-              <span className="text-sm text-gray-600">Gross Payout to Winner</span>
-              <span className="font-semibold text-gray-800">{formatCurrency(grossPayout)}</span>
+            <div className="flex justify-between">
+              <span className="text-gray-500">+ Saved Commission</span>
+              <span className="font-medium">{formatCurrency(savedFromLastMonth)}</span>
+            </div>
+            <div className="flex justify-between border-t border-gray-200 pt-1.5">
+              <span className="text-gray-500">= Total Available</span>
+              <span className="font-semibold">{formatCurrency(totalAvailable)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">− Admin Commission ({groupDetails.commission_pct}%)</span>
+              <span className="font-medium text-red-500">−{formatCurrency(adminCommission)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">− Shared Discount</span>
+              <span className="font-medium text-orange-500">−{formatCurrency(sharedDiscount)}</span>
+            </div>
+            <div className={`flex justify-between border-t border-gray-200 pt-1.5 font-semibold ${savedForNext >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+              <span>= Saved → Next Month</span>
+              <span>{formatCurrency(savedForNext)}</span>
             </div>
           </div>
         )}
       </div>
+
+      {/* Gross Payout — separate prominent card */}
+      {canCalculate && (
+        <div className="bg-white rounded-2xl p-4 shadow-sm">
+          <p className="text-sm font-medium text-gray-600 mb-2">Winner Payout</p>
+          <div className="flex justify-between items-center bg-purple-50 rounded-xl px-4 py-3 mb-3">
+            <span className="text-purple-700 font-medium">Gross Payout to Winner</span>
+            <span className="font-bold text-purple-700 text-xl">{formatCurrency(grossPayout)}</span>
+          </div>
+        </div>
+      )}
 
       {/* Deduction */}
       {canCalculate && (
