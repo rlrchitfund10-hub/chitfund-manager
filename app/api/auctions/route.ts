@@ -10,15 +10,15 @@ export async function POST(req: NextRequest) {
     const {
       group_id, month_no, auction_date, winner_member_id, bid_amount,
       admin_commission, shared_discount, member_discount_per_slot,
-      actual_installment, gross_payout, deduction_amount, notes,
-      winner2_member_id, winner1_payout, winner2_payout,
+      actual_installment, gross_payout, deduction_amount, net_payout,
+      saved_commission_in, saved_commission_out,
+      notes, winner2_member_id, winner1_payout, winner2_payout,
     } = body
 
     if (!group_id || !winner_member_id || !bid_amount) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    const net_payout = gross_payout - (deduction_amount || 0)
     const auctionId = generateId('AUC')
 
     // 1. Insert auction
@@ -28,6 +28,8 @@ export async function POST(req: NextRequest) {
       bid_amount, admin_commission, shared_discount,
       member_discount_per_slot, actual_installment,
       gross_payout, deduction_amount: deduction_amount || 0, net_payout,
+      saved_commission_in: saved_commission_in || 0,
+      saved_commission_out: saved_commission_out || 0,
       payout_status: 'Pending',
       winner2_member_id: winner2_member_id || null,
       winner1_payout: winner1_payout || null,

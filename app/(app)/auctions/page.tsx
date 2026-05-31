@@ -15,9 +15,13 @@ function AuctionForm() {
   const [members, setMembers] = useState<any[]>([])
   const [selectedGroup, setSelectedGroup] = useState(preselectedGroup)
   const [groupDetails, setGroupDetails] = useState<any>(null)
+  const [saving, setSaving] = useState(false)
+  const [success, setSuccess] = useState(false)
+
   const [form, setForm] = useState({
     winner_member_id: '',
     bid_amount: '',
+    shared_discount: '',
     deduction_amount: '0',
     auction_date: new Date().toISOString().split('T')[0],
     month_no_override: '',
@@ -26,27 +30,23 @@ function AuctionForm() {
     winner2_payout: '',
     notes: '',
   })
-  const [calc, setCalc] = useState<any>(null)
+
+  // Auto-fetched
+  const [savedFromLastMonth, setSavedFromLastMonth] = useState(0)
   const [winnerDues, setWinnerDues] = useState(0)
   const [isHalfSlot, setIsHalfSlot] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [success, setSuccess] = useState(false)
 
-  useEffect(() => { loadGroups() }, [])
-  useEffect(() => {
-    if (selectedGroup) loadGroupDetails(selectedGroup)
-  }, [selectedGroup])
-  useEffect(() => { calculateAuction() }, [form.bid_amount, groupDetails])
-  useEffect(() => { loadWinnerDues() }, [form.winner_member_id, selectedGroup])
-  useEffect(() => {
-    if (calc && form.winner_member_id) checkHalfSlot()
-  }, [form.winner_member_id, selectedGroup])
+  useEffect(() => { loadInitial() }, [])
+  useEffect(() => { if (selectedGroup) loadGroupDetails(selectedGroup) }, [selectedGroup])
+  useEffect(() => { if (form.winner_member_id && selectedGroup) { loadWinnerDues(); checkHalfSlot() } }, [form.winner_member_id, selectedGroup])
 
-  async function loadGroups() {
+  async function loadInitial() {
     const db = createClient()
-    const { data } = await db.from('groups').select('*').eq('status', 'Active').order('group_name')
-    setGroups(data || [])
-    const { data: m } = await db.from('members').select('member_id, full_name').eq('status', 'Active').order('full_name')
+    const [{ data: g }, { data: m }] = await Promise.all([
+      db.from('groups').select('*').eq('status', 'Active').order('group_name'),
+      db.from('members').select('member_id, full_name').eq('status', 'Active').order('full_name'),
+    ])
+    setGroups(g || [])
     setMembers(m || [])
   }
 
@@ -54,78 +54,79 @@ function AuctionForm() {
     const db = createClient()
     const { data } = await db.from('groups').select('*').eq('group_id', groupId).single()
     setGroupDetails(data)
+    if (data) await fetchSavedCommission(groupId, data)
   }
 
-  function calculateAuction() {
-    if (!groupDetails || !form.bid_amount) { setCalc(null); return }
-    const bid = parseFloat(form.bid_amount)
-    if (isNaN(bid) || bid <= 0) { setCalc(null); return }
+  async function fetchSavedCommission(groupId: string, group: any) {
+    // Get the month being recorded
+    const currentMonthNo = getCurrentMonthNo(group.start_date)
+    const recordingMonth = form.month_no_override ? parseInt(form.month_no_override) : currentMonthNo
+    if (recordingMonth <= 1) { setSavedFromLastMonth(0); return }
 
-    const principal = Number(groupDetails.principal_amount)
-    const totalSlots = Number(groupDetails.total_slots)
-    const commissionPct = Number(groupDetails.commission_pct)
-    const baseInstallment = Number(groupDetails.base_installment)
-
-    const adminCommission = principal * (commissionPct / 100)
-    const sharedDiscount = bid - adminCommission
-    const discountPerSlot = sharedDiscount / totalSlots
-    const actualInstallment = baseInstallment - discountPerSlot
-    const grossPayout = (actualInstallment * totalSlots) - adminCommission
-    const deduction = parseFloat(form.deduction_amount) || 0
-    const netPayout = grossPayout - deduction
-
-    setCalc({ adminCommission, sharedDiscount, discountPerSlot, actualInstallment, grossPayout, netPayout })
+    const db = createClient()
+    const { data } = await db
+      .from('auctions')
+      .select('saved_commission_out')
+      .eq('group_id', groupId)
+      .eq('month_no', recordingMonth - 1)
+      .single()
+    setSavedFromLastMonth(Number(data?.saved_commission_out || 0))
   }
 
   async function loadWinnerDues() {
-    if (!form.winner_member_id || !selectedGroup) { setWinnerDues(0); return }
     const db = createClient()
     const { data } = await db
-      .from('monthly_ledger')
-      .select('balance')
+      .from('monthly_ledger').select('balance')
       .eq('member_id', form.winner_member_id)
       .eq('group_id', selectedGroup)
       .neq('status', 'Paid')
-    const dues = (data || []).reduce((s: number, l: any) => s + Number(l.balance), 0)
-    setWinnerDues(dues)
+    setWinnerDues((data || []).reduce((s: number, l: any) => s + Number(l.balance), 0))
   }
 
   async function checkHalfSlot() {
     const db = createClient()
     const { data } = await db
-      .from('member_slots')
-      .select('slot_count')
+      .from('member_slots').select('slot_count')
       .eq('member_id', form.winner_member_id)
-      .eq('group_id', selectedGroup)
-      .single()
+      .eq('group_id', selectedGroup).single()
     setIsHalfSlot(data?.slot_count === 0.5)
   }
 
   function update(field: string, value: string) {
-    setForm(prev => {
-      const updated = { ...prev, [field]: value }
-      if (field === 'bid_amount' || field === 'deduction_amount') {
-        const bid = parseFloat(updated.bid_amount) || 0
-        const deduction = parseFloat(updated.deduction_amount) || 0
-        if (groupDetails && bid > 0) {
-          const principal = Number(groupDetails.principal_amount)
-          const totalSlots = Number(groupDetails.total_slots)
-          const commPct = Number(groupDetails.commission_pct)
-          const baseInst = Number(groupDetails.base_installment)
-          const commission = principal * (commPct / 100)
-          const discount = bid - commission
-          const gross = (baseInst - discount / totalSlots) * totalSlots - commission
-          const net = gross - deduction
-          updated.winner1_payout = String(Math.round(net / 2))
-          updated.winner2_payout = String(Math.round(net / 2))
-        }
-      }
-      return updated
-    })
+    setForm(prev => ({ ...prev, [field]: value }))
   }
 
+  // --- Core calculation ---
+  const bid = parseFloat(form.bid_amount) || 0
+  const sharedDiscount = parseFloat(form.shared_discount) || 0
+  const deduction = parseFloat(form.deduction_amount) || 0
+  const adminCommission = groupDetails ? Number(groupDetails.principal_amount) * (Number(groupDetails.commission_pct) / 100) : 0
+  const totalAvailable = bid + savedFromLastMonth
+  const netPool = totalAvailable - adminCommission
+  const savedForNext = netPool - sharedDiscount
+  const discountPerSlot = groupDetails ? sharedDiscount / Number(groupDetails.total_slots) : 0
+  const actualInstallment = groupDetails ? Number(groupDetails.base_installment) - discountPerSlot : 0
+  const grossPayout = groupDetails ? (actualInstallment * Number(groupDetails.total_slots)) - adminCommission : 0
+  const netPayout = grossPayout - deduction
+
+  const canCalculate = bid > 0 && sharedDiscount > 0 && !!groupDetails
+
+  // Auto-split for shared slot
+  useEffect(() => {
+    if (canCalculate && netPayout > 0) {
+      setForm(prev => ({
+        ...prev,
+        winner1_payout: String(Math.round(netPayout / 2)),
+        winner2_payout: String(Math.round(netPayout / 2)),
+      }))
+    }
+  }, [netPayout, canCalculate])
+
   async function handleSave() {
-    if (!selectedGroup || !form.winner_member_id || !form.bid_amount) return
+    if (!selectedGroup || !form.winner_member_id || !form.bid_amount || !form.shared_discount) {
+      alert('Please fill in all required fields including Shared Discount')
+      return
+    }
     setSaving(true)
     const autoMonthNo = groupDetails ? getCurrentMonthNo(groupDetails.start_date) : 1
     const monthNo = form.month_no_override ? parseInt(form.month_no_override) : autoMonthNo
@@ -138,13 +139,20 @@ function AuctionForm() {
         month_no: monthNo,
         auction_date: form.auction_date,
         winner_member_id: form.winner_member_id,
-        bid_amount: parseFloat(form.bid_amount),
-        deduction_amount: parseFloat(form.deduction_amount) || 0,
+        bid_amount: bid,
+        admin_commission: adminCommission,
+        shared_discount: sharedDiscount,
+        member_discount_per_slot: discountPerSlot,
+        actual_installment: actualInstallment,
+        gross_payout: grossPayout,
+        deduction_amount: deduction,
+        net_payout: netPayout,
+        saved_commission_in: savedFromLastMonth,
+        saved_commission_out: savedForNext,
         winner2_member_id: isHalfSlot ? form.winner2_member_id : null,
         winner1_payout: isHalfSlot ? parseFloat(form.winner1_payout) : null,
         winner2_payout: isHalfSlot ? parseFloat(form.winner2_payout) : null,
         notes: form.notes,
-        ...calc,
       }),
     })
 
@@ -164,18 +172,20 @@ function AuctionForm() {
         <div className="text-center bg-white rounded-2xl p-8 shadow-sm">
           <div className="text-5xl mb-4">🏆</div>
           <p className="text-lg font-bold text-green-700">Auction recorded!</p>
-          <p className="text-gray-500 text-sm mt-2">Redirecting to dashboard...</p>
+          <p className="text-gray-400 text-sm mt-1">Member payments updated automatically</p>
+          <p className="text-gray-500 text-sm mt-1">Redirecting to dashboard...</p>
         </div>
       </div>
     )
   }
 
-  const monthNo = groupDetails ? getCurrentMonthNo(groupDetails.start_date) : '-'
+  const autoMonthNo = groupDetails ? getCurrentMonthNo(groupDetails.start_date) : '-'
 
   return (
     <div className="p-4 max-w-lg mx-auto space-y-4 pb-8">
       <h2 className="text-xl font-bold text-gray-800">Record Auction</h2>
 
+      {/* Group + Month selection */}
       <div className="bg-white rounded-2xl p-4 shadow-sm space-y-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Select Group *</label>
@@ -190,9 +200,9 @@ function AuctionForm() {
         </div>
 
         {groupDetails && (
-          <div className="bg-indigo-50 rounded-xl p-3 text-sm">
-            <p className="text-indigo-800 font-medium">{groupDetails.group_name} — Month {monthNo}</p>
-            <p className="text-indigo-600">Base Installment: {formatCurrency(groupDetails.base_installment)} | Commission: {groupDetails.commission_pct}%</p>
+          <div className="bg-indigo-50 rounded-xl px-4 py-3 text-sm flex justify-between">
+            <span className="text-indigo-700 font-medium">{groupDetails.group_name}</span>
+            <span className="text-indigo-600">Base ₹{Number(groupDetails.base_installment).toLocaleString()} | {groupDetails.commission_pct}% comm</span>
           </div>
         )}
 
@@ -206,20 +216,23 @@ function AuctionForm() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Month No <span className="text-gray-400">(auto: {groupDetails ? getCurrentMonthNo(groupDetails.start_date) : '-'})</span>
+              Month No <span className="text-gray-400 text-xs">(auto: {autoMonthNo})</span>
             </label>
             <input
               type="number" min="1"
               value={form.month_no_override}
-              onChange={e => update('month_no_override', e.target.value)}
-              placeholder="Override month"
+              onChange={e => { update('month_no_override', e.target.value); if (selectedGroup && groupDetails) fetchSavedCommission(selectedGroup, groupDetails) }}
+              placeholder={String(autoMonthNo)}
               className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 text-sm"
             />
           </div>
         </div>
+      </div>
 
+      {/* Winner */}
+      <div className="bg-white rounded-2xl p-4 shadow-sm space-y-3">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Winner *</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Auction Winner *</label>
           <select
             value={form.winner_member_id}
             onChange={e => update('winner_member_id', e.target.value)}
@@ -229,98 +242,168 @@ function AuctionForm() {
             {members.map(m => <option key={m.member_id} value={m.member_id}>{m.full_name}</option>)}
           </select>
           {winnerDues > 0 && (
-            <p className="text-sm text-red-600 mt-1">⚠ Winner has {formatCurrency(winnerDues)} outstanding dues</p>
+            <p className="text-sm text-red-600 mt-1.5 bg-red-50 px-3 py-1.5 rounded-lg">
+              ⚠ Winner has {formatCurrency(winnerDues)} outstanding dues
+            </p>
           )}
         </div>
+      </div>
 
+      {/* Auction Calculation */}
+      <div className="bg-white rounded-2xl p-4 shadow-sm space-y-4">
+        <p className="font-semibold text-gray-800">Auction Calculation</p>
+
+        {/* Bid Amount */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Winning Bid Amount (₹) *</label>
           <input
             type="number" value={form.bid_amount} onChange={e => update('bid_amount', e.target.value)}
             placeholder="Enter bid amount"
-            className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 text-sm"
+            className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 text-sm font-medium"
           />
         </div>
 
-        {calc && (
-          <div className="bg-gray-50 rounded-xl p-3 space-y-1.5 text-sm border border-gray-200">
-            <p className="font-semibold text-gray-700 mb-2">Auto-Calculated</p>
-            <div className="flex justify-between"><span className="text-gray-600">Admin Commission</span><span className="font-medium">{formatCurrency(calc.adminCommission)}</span></div>
-            <div className="flex justify-between"><span className="text-gray-600">Shared Discount</span><span className="font-medium">{formatCurrency(calc.sharedDiscount)}</span></div>
-            <div className="flex justify-between"><span className="text-gray-600">Discount per Slot</span><span className="font-medium">{formatCurrency(calc.discountPerSlot)}</span></div>
-            <div className="flex justify-between font-semibold border-t border-gray-200 pt-1.5"><span>New Installment</span><span className="text-indigo-700">{formatCurrency(calc.actualInstallment)}</span></div>
-            <div className="flex justify-between"><span className="text-gray-600">Gross Payout</span><span className="font-medium">{formatCurrency(calc.grossPayout)}</span></div>
+        {/* Saved from last month */}
+        {savedFromLastMonth > 0 && (
+          <div className="flex items-center justify-between bg-blue-50 rounded-xl px-4 py-2.5 text-sm">
+            <span className="text-blue-700">+ Saved Commission (from last month)</span>
+            <span className="font-bold text-blue-700">{formatCurrency(savedFromLastMonth)}</span>
           </div>
         )}
 
+        {/* Calculation breakdown — only when bid is entered */}
+        {bid > 0 && groupDetails && (
+          <div className="bg-gray-50 rounded-xl p-3 space-y-2 border border-gray-200">
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-600">Total Available</span>
+              <span className="font-medium">{formatCurrency(totalAvailable)}</span>
+            </div>
+            <div className="flex justify-between text-sm border-t border-gray-200 pt-2">
+              <span className="text-gray-600">− Admin Commission ({groupDetails.commission_pct}%)</span>
+              <span className="font-medium text-red-500">−{formatCurrency(adminCommission)}</span>
+            </div>
+            <div className="flex justify-between text-sm font-semibold border-t border-gray-200 pt-2">
+              <span className="text-gray-700">= Net Pool</span>
+              <span className="text-gray-800">{formatCurrency(netPool)}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Shared Discount — admin entry */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Deduction Amount (₹) {winnerDues > 0 && <span className="text-red-500">(Suggested: {formatCurrency(winnerDues)})</span>}
+            Shared Discount (₹) * <span className="text-gray-400 text-xs">— amount you decide to share with all members</span>
           </label>
           <input
-            type="number" value={form.deduction_amount} onChange={e => update('deduction_amount', e.target.value)}
-            placeholder="0"
-            className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 text-sm"
+            type="number" value={form.shared_discount} onChange={e => update('shared_discount', e.target.value)}
+            placeholder="Enter amount to share"
+            className="w-full px-4 py-3 border border-indigo-200 rounded-xl bg-indigo-50 text-sm font-medium"
           />
-          {winnerDues > 0 && (
-            <button
-              onClick={() => update('deduction_amount', String(winnerDues))}
-              className="mt-1 text-xs text-indigo-600 hover:text-indigo-800"
-            >
-              Use full dues ({formatCurrency(winnerDues)})
-            </button>
+          {sharedDiscount > 0 && groupDetails && (
+            <p className="text-xs text-indigo-600 mt-1">
+              Each member gets: {formatCurrency(discountPerSlot)} discount per slot
+            </p>
           )}
         </div>
 
-        {calc && (
-          <div className="bg-green-50 rounded-xl p-3 flex justify-between items-center">
-            <span className="font-bold text-gray-800">Net Payout to Winner</span>
-            <span className="font-bold text-green-700 text-xl">{formatCurrency(calc.grossPayout - (parseFloat(form.deduction_amount) || 0))}</span>
+        {/* Results */}
+        {canCalculate && (
+          <div className="space-y-2">
+            {/* Saved for next month */}
+            <div className={`flex justify-between items-center rounded-xl px-4 py-3 ${savedForNext >= 0 ? 'bg-green-50' : 'bg-red-50'}`}>
+              <div>
+                <p className={`text-sm font-semibold ${savedForNext >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                  Saved Commission → Next Month
+                </p>
+                <p className="text-xs text-gray-500">Carries forward to Month {(form.month_no_override ? parseInt(form.month_no_override) : Number(autoMonthNo)) + 1}</p>
+              </div>
+              <span className={`font-bold text-lg ${savedForNext >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+                {formatCurrency(savedForNext)}
+              </span>
+            </div>
+
+            {/* Gross payout */}
+            <div className="flex justify-between items-center bg-gray-50 rounded-xl px-4 py-2.5">
+              <span className="text-sm text-gray-600">Gross Payout to Winner</span>
+              <span className="font-semibold text-gray-800">{formatCurrency(grossPayout)}</span>
+            </div>
           </div>
         )}
+      </div>
 
-        {/* 0.5 slot split */}
-        {isHalfSlot && (
-          <div className="bg-yellow-50 rounded-xl p-3 space-y-3">
-            <p className="font-semibold text-yellow-800 text-sm">Shared Slot — Payout Split</p>
-            <div>
-              <label className="block text-xs text-gray-600 mb-1">Winner 2 (Partner)</label>
-              <select
-                value={form.winner2_member_id}
-                onChange={e => update('winner2_member_id', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-white text-sm"
+      {/* Deduction */}
+      {canCalculate && (
+        <div className="bg-white rounded-2xl p-4 shadow-sm space-y-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Deduction from Winner
+              {winnerDues > 0 && <span className="text-red-500 ml-1 text-xs">(dues: {formatCurrency(winnerDues)})</span>}
+            </label>
+            <input
+              type="number" value={form.deduction_amount} onChange={e => update('deduction_amount', e.target.value)}
+              placeholder="0"
+              className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 text-sm"
+            />
+            {winnerDues > 0 && (
+              <button
+                onClick={() => update('deduction_amount', String(Math.round(winnerDues)))}
+                className="mt-1 text-xs text-indigo-600"
               >
-                <option value="">Select partner...</option>
-                {members.map(m => <option key={m.member_id} value={m.member_id}>{m.full_name}</option>)}
-              </select>
+                Deduct full dues ({formatCurrency(winnerDues)})
+              </button>
+            )}
+          </div>
+
+          {/* Net Payout */}
+          <div className="bg-indigo-600 text-white rounded-xl px-4 py-4 flex justify-between items-center">
+            <span className="font-bold">Net Payout to Winner</span>
+            <span className="font-bold text-2xl">{formatCurrency(netPayout)}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Shared slot split */}
+      {canCalculate && isHalfSlot && (
+        <div className="bg-yellow-50 rounded-2xl p-4 shadow-sm space-y-3 border border-yellow-200">
+          <p className="font-semibold text-yellow-800 text-sm">Shared Slot — Split Payout</p>
+          <div>
+            <label className="block text-xs text-gray-600 mb-1">Winner 2 (Partner)</label>
+            <select
+              value={form.winner2_member_id}
+              onChange={e => update('winner2_member_id', e.target.value)}
+              className="w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-white text-sm"
+            >
+              <option value="">Select partner...</option>
+              {members.map(m => <option key={m.member_id} value={m.member_id}>{m.full_name}</option>)}
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-gray-600 mb-1">Winner 1 Payout</label>
+              <input type="number" value={form.winner1_payout} onChange={e => update('winner1_payout', e.target.value)}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-white text-sm" />
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-xs text-gray-600 mb-1">Winner 1 Payout</label>
-                <input type="number" value={form.winner1_payout} onChange={e => update('winner1_payout', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-white text-sm" />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-600 mb-1">Winner 2 Payout</label>
-                <input type="number" value={form.winner2_payout} onChange={e => update('winner2_payout', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-white text-sm" />
-              </div>
+            <div>
+              <label className="block text-xs text-gray-600 mb-1">Winner 2 Payout</label>
+              <input type="number" value={form.winner2_payout} onChange={e => update('winner2_payout', e.target.value)}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-white text-sm" />
             </div>
           </div>
-        )}
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Notes (optional)</label>
-          <input value={form.notes} onChange={e => update('notes', e.target.value)}
-            placeholder="Any notes..."
-            className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 text-sm" />
         </div>
+      )}
+
+      {/* Notes */}
+      <div className="bg-white rounded-2xl p-4 shadow-sm">
+        <label className="block text-sm font-medium text-gray-700 mb-1">Notes (optional)</label>
+        <input value={form.notes} onChange={e => update('notes', e.target.value)}
+          placeholder="Any notes..."
+          className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 text-sm" />
       </div>
 
       <button
         onClick={handleSave}
-        disabled={saving || !selectedGroup || !form.winner_member_id || !form.bid_amount}
-        className="w-full bg-indigo-600 text-white font-bold py-4 rounded-2xl shadow active:scale-95 disabled:opacity-60"
+        disabled={saving || !selectedGroup || !form.winner_member_id || !bid || !sharedDiscount}
+        className="w-full bg-indigo-600 text-white font-bold py-4 rounded-2xl shadow active:scale-95 disabled:opacity-50 text-lg"
       >
         {saving ? 'Saving...' : '🔨 Record Auction'}
       </button>
