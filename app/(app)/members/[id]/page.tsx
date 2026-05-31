@@ -87,18 +87,32 @@ export default function MemberProfilePage() {
     <div className="pb-8">
       {/* Header */}
       <div className="bg-indigo-600 text-white p-4 pb-8">
-        <div className="flex items-center gap-3 mb-4">
-          <button onClick={() => router.back()} className="text-indigo-200 hover:text-white">←</button>
-          <span className="text-sm text-indigo-200">Member Profile</span>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <button onClick={() => router.back()} className="text-indigo-200 text-xl">←</button>
+            <span className="text-sm text-indigo-200">Member Profile</span>
+          </div>
+          <Link href={`/members/${memberId}/edit`}>
+            <button className="text-xs bg-white/20 hover:bg-white/30 text-white px-3 py-1.5 rounded-lg">✏️ Edit</button>
+          </Link>
         </div>
         <div className="flex items-center gap-4">
-          <div className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center text-2xl font-bold">
+          <div className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center text-2xl font-bold flex-shrink-0">
             {member.full_name.charAt(0)}
           </div>
-          <div>
+          <div className="flex-1">
             <h2 className="text-xl font-bold">{member.full_name}</h2>
-            <p className="text-indigo-200 text-sm">{member.phone}</p>
-            {member.is_daily_payer && <span className="text-xs bg-yellow-400 text-yellow-900 px-2 py-0.5 rounded-full font-medium">⭐ Daily Payer</span>}
+            <div className="flex items-center gap-3 mt-1">
+              <a href={`tel:${member.phone}`} className="flex items-center gap-1 text-indigo-200 text-sm hover:text-white">
+                📞 {member.phone}
+              </a>
+            </div>
+            <div className="flex items-center gap-2 mt-1">
+              {member.is_daily_payer && <span className="text-xs bg-yellow-400 text-yellow-900 px-2 py-0.5 rounded-full font-medium">⭐ Daily Payer</span>}
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${member.status === 'Active' ? 'bg-green-400 text-green-900' : 'bg-gray-300 text-gray-700'}`}>
+                {member.status}
+              </span>
+            </div>
           </div>
         </div>
       </div>

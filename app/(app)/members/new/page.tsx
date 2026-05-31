@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 
 export default function NewMemberPage() {
   const router = useRouter()
@@ -12,9 +13,19 @@ export default function NewMemberPage() {
   })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [lastCreated, setLastCreated] = useState<{ name: string; id: string } | null>(null)
 
   function update(field: string, value: any) {
     setForm(prev => ({ ...prev, [field]: value }))
+  }
+
+  function resetForm() {
+    setForm({
+      full_name: '', phone: '', phone_alt: '', address: '',
+      aadhaar: '', join_date: new Date().toISOString().split('T')[0],
+      is_daily_payer: false, status: 'Active', notes: '',
+    })
+    setError('')
   }
 
   async function handleSave() {
@@ -31,7 +42,10 @@ export default function NewMemberPage() {
     })
     const result = await res.json()
     if (!res.ok) { setError(result.error || 'Failed to save'); setSaving(false); return }
-    router.push(`/members/${result.member_id}`)
+
+    setLastCreated({ name: form.full_name, id: result.member_id })
+    resetForm()
+    setSaving(false)
   }
 
   return (
@@ -41,6 +55,25 @@ export default function NewMemberPage() {
         <h2 className="text-xl font-bold text-gray-800">Add Member</h2>
       </div>
 
+      {/* Success banner — shows after each save */}
+      {lastCreated && (
+        <div className="bg-green-50 border border-green-200 rounded-2xl p-4">
+          <p className="text-green-700 font-semibold">✅ {lastCreated.name} added!</p>
+          <div className="flex gap-3 mt-3">
+            <Link href={`/members/${lastCreated.id}`} className="flex-1">
+              <button className="w-full border border-green-600 text-green-700 py-2 rounded-xl text-sm font-medium">
+                View Profile
+              </button>
+            </Link>
+            <Link href="/members" className="flex-1">
+              <button className="w-full border border-gray-300 text-gray-600 py-2 rounded-xl text-sm font-medium">
+                Members List
+              </button>
+            </Link>
+          </div>
+        </div>
+      )}
+
       <div className="bg-white rounded-2xl p-4 shadow-sm space-y-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
@@ -48,14 +81,14 @@ export default function NewMemberPage() {
             value={form.full_name} onChange={e => update('full_name', e.target.value)}
             placeholder="Member's full name"
             className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 text-sm"
+            autoFocus
           />
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number *</label>
           <input
             value={form.phone} onChange={e => update('phone', e.target.value)}
-            placeholder="10-digit mobile number"
-            type="tel"
+            placeholder="10-digit mobile number" type="tel"
             className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 text-sm"
           />
         </div>
@@ -63,8 +96,7 @@ export default function NewMemberPage() {
           <label className="block text-sm font-medium text-gray-700 mb-1">Alt Phone</label>
           <input
             value={form.phone_alt} onChange={e => update('phone_alt', e.target.value)}
-            placeholder="Alternate number (optional)"
-            type="tel"
+            placeholder="Alternate number (optional)" type="tel"
             className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 text-sm"
           />
         </div>
@@ -72,17 +104,15 @@ export default function NewMemberPage() {
           <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
           <textarea
             value={form.address} onChange={e => update('address', e.target.value)}
-            placeholder="Address (optional)"
-            rows={2}
+            placeholder="Address (optional)" rows={2}
             className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 text-sm"
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Aadhaar (last 4 digits)</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Aadhaar</label>
           <input
             value={form.aadhaar} onChange={e => update('aadhaar', e.target.value)}
-            placeholder="XXXX (optional)"
-            maxLength={12}
+            placeholder="Aadhaar number (optional)" maxLength={12}
             className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 text-sm"
           />
         </div>
@@ -96,7 +126,7 @@ export default function NewMemberPage() {
         <div className="flex items-center justify-between py-2">
           <div>
             <p className="font-medium text-gray-800 text-sm">Daily Payer ⭐</p>
-            <p className="text-xs text-gray-500">Show at top of members list</p>
+            <p className="text-xs text-gray-500">Shows at top of members list</p>
           </div>
           <button
             onClick={() => update('is_daily_payer', !form.is_daily_payer)}
@@ -113,16 +143,14 @@ export default function NewMemberPage() {
             className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 text-sm"
           />
         </div>
-
         {error && <p className="text-red-600 text-sm bg-red-50 px-4 py-3 rounded-xl">{error}</p>}
       </div>
 
       <button
-        onClick={handleSave}
-        disabled={saving}
+        onClick={handleSave} disabled={saving}
         className="w-full bg-indigo-600 text-white font-bold py-4 rounded-2xl shadow active:scale-95 transition-all disabled:opacity-60"
       >
-        {saving ? 'Saving...' : 'Save Member'}
+        {saving ? 'Saving...' : lastCreated ? '+ Save Another Member' : 'Save Member'}
       </button>
     </div>
   )

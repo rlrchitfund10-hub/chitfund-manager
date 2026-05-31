@@ -8,7 +8,6 @@ import { formatCurrency } from '@/lib/utils'
 export default function OverduePage() {
   const [overdueList, setOverdueList] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [sendingAll, setSendingAll] = useState(false)
 
   useEffect(() => { loadOverdue() }, [])
 
@@ -85,14 +84,17 @@ export default function OverduePage() {
               </div>
 
               <div className="flex gap-2">
+                <a href={`tel:${item.members?.phone}`} className="flex-shrink-0">
+                  <button className="bg-blue-100 text-blue-700 py-2 px-3 rounded-xl text-sm font-medium">
+                    📞 Call
+                  </button>
+                </a>
                 <a
                   href={`https://wa.me/91${item.members?.phone}?text=${buildMessage(item)}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex-1"
+                  target="_blank" rel="noopener noreferrer" className="flex-shrink-0"
                 >
-                  <button className="w-full bg-green-500 text-white py-2 rounded-xl text-sm font-medium">
-                    📱 WhatsApp
+                  <button className="bg-green-500 text-white py-2 px-3 rounded-xl text-sm font-medium">
+                    📱 WA
                   </button>
                 </a>
                 <Link href={`/payments?member=${item.member_id}&name=${encodeURIComponent(item.members?.full_name)}`} className="flex-1">
