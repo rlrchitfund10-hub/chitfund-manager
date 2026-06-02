@@ -48,11 +48,12 @@ export default function EditAuctionPage() {
     setGroup(groupData)
 
     // Load all members for this group
-    const { data: slots } = await db.from('member_slots').select('member_id').eq('group_id', auction.group_id)
-    const memberIds = (slots || []).map((s: any) => s.member_id)
+    const { data: slots } = await db.from('member_slots').select('member_id, slot_count').eq('group_id', auction.group_id)
+    const slotMap: Record<string, number> = {}
+    const memberIds = (slots || []).map((s: any) => { slotMap[s.member_id] = Number(s.slot_count); return s.member_id })
     if (memberIds.length > 0) {
       const { data: md } = await db.from('members').select('member_id, full_name').in('member_id', memberIds).order('full_name')
-      setMembers(md || [])
+      setMembers((md || []).map((m: any) => ({ ...m, slot_count: slotMap[m.member_id] ?? 1 })))
     }
 
     // Pre-fill form
@@ -84,13 +85,9 @@ export default function EditAuctionPage() {
     setWinnerDues((data || []).reduce((s: number, l: any) => s + Number(l.balance), 0))
   }
 
-  async function checkHalfSlot() {
-    if (!originalAuction) return
-    const db = createClient()
-    const { data } = await db.from('member_slots').select('slot_count')
-      .eq('member_id', form.winner_member_id)
-      .eq('group_id', originalAuction.group_id).single()
-    setIsHalfSlot(data?.slot_count === 0.5)
+  function checkHalfSlot() {
+    const m = members.find((m: any) => m.member_id === form.winner_member_id)
+    setIsHalfSlot((m?.slot_count ?? 1) === 0.5)
   }
 
   function update(field: string, value: string) {
@@ -126,6 +123,14 @@ export default function EditAuctionPage() {
   async function handleSave() {
     if (!form.winner_member_id || !bid || !sharedDiscount) {
       alert('Fill in all required fields including bid amount and shared discount')
+      return
+    }
+    if (isHalfSlot && !form.winner2_member_id) {
+      alert('This winner has a ½ slot — please select a partner to complete the auction')
+      return
+    }
+    if (sharedDiscount > netPool) {
+      alert(`Shared Discount cannot exceed Net Pool (${formatCurrency(netPool)})`)
       return
     }
     setSaving(true)
@@ -208,7 +213,9 @@ export default function EditAuctionPage() {
           <select value={form.winner_member_id} onChange={e => update('winner_member_id', e.target.value)}
             className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 text-sm">
             <option value="">Select winner...</option>
-            {members.map(m => <option key={m.member_id} value={m.member_id}>{m.full_name}</option>)}
+            {members.map((m: any) => (
+              <option key={m.member_id} value={m.member_id}>{m.full_name}{m.slot_count === 0.5 ? ' (½ slot)' : ''}</option>
+            ))}
           </select>
           {winnerDues > 0 && (
             <p className="text-sm text-red-600 mt-1 bg-red-50 px-3 py-1.5 rounded-lg">
@@ -216,6 +223,28 @@ export default function EditAuctionPage() {
             </p>
           )}
         </div>
+
+        {isHalfSlot && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2">
+            <p className="text-sm font-semibold text-amber-800">½ Slot — must select a partner to complete the auction</p>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Partner Winner (½ slot) *</label>
+              <select
+                value={form.winner2_member_id}
+                onChange={e => update('winner2_member_id', e.target.value)}
+                className="w-full px-3 py-2.5 border border-amber-300 rounded-xl bg-white text-sm"
+              >
+                <option value="">Select ½ slot partner...</option>
+                {members
+                  .filter((m: any) => m.slot_count === 0.5 && m.member_id !== form.winner_member_id)
+                  .map((m: any) => (
+                    <option key={m.member_id} value={m.member_id}>{m.full_name}</option>
+                  ))
+                }
+              </select>
+            </div>
+          </div>
+        )}
 
         {/* Payout status */}
         <div>
@@ -288,20 +317,27 @@ export default function EditAuctionPage() {
 
         {/* Results: discount per slot + saved next month */}
         {sharedDiscount > 0 && group && (
-          <div className="bg-gray-50 rounded-xl p-3 space-y-1.5 border border-gray-200 text-sm">
-            <div className="flex justify-between">
-              <span className="text-gray-500">− Shared Discount</span>
-              <span className="font-medium text-orange-500">−{formatCurrency(sharedDiscount)}</span>
+          <>
+            {sharedDiscount > netPool && (
+              <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-xl">
+                ⚠ Shared Discount ({formatCurrency(sharedDiscount)}) cannot exceed Net Pool ({formatCurrency(netPool)})
+              </p>
+            )}
+            <div className="bg-gray-50 rounded-xl p-3 space-y-1.5 border border-gray-200 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-500">− Shared Discount</span>
+                <span className="font-medium text-orange-500">−{formatCurrency(sharedDiscount)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-indigo-700 font-medium">Discount per Slot</span>
+                <span className="font-semibold text-indigo-700">{formatCurrency(discountPerSlot)}</span>
+              </div>
+              <div className={`flex justify-between border-t border-gray-200 pt-1.5 font-semibold ${savedForNext >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+                <span>Saved =</span>
+                <span>{formatCurrency(savedForNext)}</span>
+              </div>
             </div>
-            <div className="flex justify-between">
-              <span className="text-indigo-700 font-medium">Discount per Slot</span>
-              <span className="font-semibold text-indigo-700">{formatCurrency(discountPerSlot)}</span>
-            </div>
-            <div className={`flex justify-between border-t border-gray-200 pt-1.5 font-semibold ${savedForNext >= 0 ? 'text-green-700' : 'text-red-600'}`}>
-              <span>Saved =</span>
-              <span>{formatCurrency(savedForNext)}</span>
-            </div>
-          </div>
+          </>
         )}
       </div>
 
@@ -322,18 +358,10 @@ export default function EditAuctionPage() {
         </div>
       )}
 
-      {/* Shared slot */}
-      {canCalc && isHalfSlot && (
+      {/* Shared slot payout split */}
+      {canCalc && isHalfSlot && form.winner2_member_id && (
         <div className="bg-yellow-50 rounded-2xl p-4 shadow-sm border border-yellow-200 space-y-3">
           <p className="font-semibold text-yellow-800 text-sm">Shared Slot — Split Payout</p>
-          <div>
-            <label className="block text-xs text-gray-600 mb-1">Winner 2 (Partner)</label>
-            <select value={form.winner2_member_id} onChange={e => update('winner2_member_id', e.target.value)}
-              className="w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-white text-sm">
-              <option value="">Select partner...</option>
-              {members.map(m => <option key={m.member_id} value={m.member_id}>{m.full_name}</option>)}
-            </select>
-          </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs text-gray-600 mb-1">Winner 1 Payout</label>
@@ -356,7 +384,7 @@ export default function EditAuctionPage() {
           className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 text-sm" />
       </div>
 
-      <button onClick={handleSave} disabled={saving || !canCalc}
+      <button onClick={handleSave} disabled={saving || !canCalc || (isHalfSlot && !form.winner2_member_id) || (sharedDiscount > netPool)}
         className="w-full bg-indigo-600 text-white font-bold py-4 rounded-2xl shadow active:scale-95 disabled:opacity-50 text-lg">
         {saving ? 'Saving...' : '✓ Save Auction Changes'}
       </button>
