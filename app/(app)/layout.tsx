@@ -6,10 +6,9 @@ import { createClient } from '@/lib/supabase/client'
 
 const navItems = [
   { href: '/dashboard', icon: '🏠', label: 'Home' },
-  { href: '/payments', icon: '💳', label: 'Payment' },
   { href: '/members', icon: '👥', label: 'Members' },
   { href: '/groups', icon: '📋', label: 'Groups' },
-  { href: '/more', icon: '⋯', label: 'More' },
+  { href: '/more', icon: '📜', label: 'History' },
 ]
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {

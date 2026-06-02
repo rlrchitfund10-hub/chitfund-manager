@@ -14,7 +14,7 @@ export default function GroupDetailPage() {
   const [ledger, setLedger] = useState<any[]>([])
   const [allAuctions, setAllAuctions] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<'members' | 'auctions'>('members')
+  const [tab, setTab] = useState<'members' | 'history' | 'auctions'>('members')
 
   // Add members panel
   const [showAddPanel, setShowAddPanel] = useState(false)
@@ -170,6 +170,13 @@ export default function GroupDetailPage() {
   const totalExpected = ledger.reduce((s, l) => s + Number(l.expected_amount), 0)
   const pct = totalExpected > 0 ? Math.round((totalCollected / totalExpected) * 100) : 0
 
+  // Build map of memberId → months won
+  const wonMonths: Record<string, number[]> = {}
+  allAuctions.forEach(a => {
+    if (!wonMonths[a.winner_member_id]) wonMonths[a.winner_member_id] = []
+    wonMonths[a.winner_member_id].push(a.month_no)
+  })
+
   const filteredAvailableMembers = allMembersList.filter(m =>
     m.full_name.toLowerCase().includes(memberSearch.toLowerCase()) || m.phone.includes(memberSearch)
   )
@@ -216,11 +223,8 @@ export default function GroupDetailPage() {
       </div>
 
       {/* Actions */}
-      <div className="mx-4 flex gap-3 mb-4">
-        <Link href={`/auctions?group=${id}`} className="flex-1">
-          <button className="w-full bg-indigo-600 text-white py-3 rounded-xl font-medium text-sm">🔨 Record Auction</button>
-        </Link>
-        <button onClick={openAddPanel} className="flex-1 border-2 border-indigo-600 text-indigo-600 py-3 rounded-xl font-medium text-sm">
+      <div className="mx-4 mb-4">
+        <button onClick={openAddPanel} className="w-full border-2 border-indigo-600 text-indigo-600 py-3 rounded-xl font-medium text-sm">
           + Add Members
         </button>
       </div>
@@ -344,22 +348,27 @@ export default function GroupDetailPage() {
         </div>
       )}
 
-      {/* Tabs */}
-      <div className="mx-4 flex border-b border-gray-200 mb-3">
-        {[
-          { key: 'members', label: `Members (${members.length}) — ${currentGroupSlots} slots` },
+      {/* Tabs — 4 buttons */}
+      <div className="mx-4 flex border-b border-gray-200 mb-3 overflow-x-auto">
+        {([
+          { key: 'members', label: `Members (${members.length})` },
+          { key: 'history', label: 'History' },
           { key: 'auctions', label: `Auctions (${allAuctions.length})` },
-        ].map(t => (
-          <button key={t.key} onClick={() => setTab(t.key as any)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 ${tab === t.key ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500'}`}>
+        ] as const).map(t => (
+          <button key={t.key} onClick={() => setTab(t.key)}
+            className={`px-3 py-2 text-xs font-medium border-b-2 whitespace-nowrap ${tab === t.key ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500'}`}>
             {t.label}
           </button>
         ))}
+        <Link href={`/auctions?group=${id}`}
+          className="px-3 py-2 text-xs font-medium border-b-2 border-transparent text-indigo-600 whitespace-nowrap ml-auto">
+          🔨 Record
+        </Link>
       </div>
 
       <div className="px-4 space-y-2">
 
-        {/* MEMBERS TAB */}
+        {/* MEMBERS TAB — Name | Slots | Won Month(s) */}
         {tab === 'members' && (
           <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
             {members.length === 0 ? (
@@ -367,40 +376,83 @@ export default function GroupDetailPage() {
                 <p className="text-gray-400 text-sm">No members yet</p>
                 <button onClick={openAddPanel} className="mt-3 text-indigo-600 text-sm font-medium">+ Add members</button>
               </div>
-            ) : members.map(slot => (
-              <div key={slot.slot_id} className="flex items-center px-4 py-3 border-b border-gray-50 last:border-0 gap-3">
-                <Link href={`/members/${slot.member_id}`} className="flex items-center gap-3 flex-1 min-w-0">
-                  <div className="w-9 h-9 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-700 font-bold text-sm flex-shrink-0">
-                    {slot.members?.full_name?.charAt(0)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-gray-800 text-sm truncate">{slot.members?.full_name}</p>
-                    <p className="text-xs text-gray-500">{slot.members?.phone} • {slot.slot_count} slot{slot.slot_count !== 1 ? 's' : ''}</p>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    {slot.status === 'Won' ? (
-                      <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full font-medium">🏆 Won</span>
-                    ) : (
-                      <>
-                        {slot.ledger?.balance > 0 ? (
-                          <p className="text-sm font-bold text-red-600">{formatCurrency(slot.ledger.balance)}</p>
-                        ) : (
-                          <p className="text-sm font-bold text-green-600">✓ Paid</p>
-                        )}
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${statusColor(slot.ledger?.status || 'Pending')}`}>
-                          {slot.ledger?.status || 'Pending'}
-                        </span>
-                      </>
-                    )}
-                  </div>
-                </Link>
-                <button onClick={() => removeMember(slot.slot_id)} className="text-gray-300 hover:text-red-500 px-2 py-1 text-xs flex-shrink-0" title="Remove">✕</button>
-              </div>
-            ))}
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100 bg-gray-50">
+                    <th className="px-4 py-2 text-left text-xs text-gray-500 font-medium">Name</th>
+                    <th className="px-2 py-2 text-center text-xs text-gray-500 font-medium">Slots</th>
+                    <th className="px-4 py-2 text-left text-xs text-gray-500 font-medium">Won Month(s)</th>
+                    <th className="px-2 py-2"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {members.map(slot => {
+                    const wins = wonMonths[slot.member_id] || []
+                    return (
+                      <tr key={slot.slot_id} className="border-b border-gray-50 last:border-0">
+                        <td className="px-4 py-3">
+                          <Link href={`/members/${slot.member_id}`}>
+                            <p className="font-medium text-gray-800 text-sm">{slot.members?.full_name}</p>
+                            <p className="text-xs text-gray-400">{slot.members?.phone}</p>
+                          </Link>
+                        </td>
+                        <td className="px-2 py-3 text-center font-medium text-gray-700">{slot.slot_count}</td>
+                        <td className="px-4 py-3">
+                          {wins.length > 0
+                            ? wins.map(m => (
+                                <span key={m} className="inline-block bg-purple-100 text-purple-700 text-xs px-2 py-0.5 rounded-full mr-1">M{m}</span>
+                              ))
+                            : <span className="text-gray-300 text-xs">—</span>
+                          }
+                        </td>
+                        <td className="px-2 py-3">
+                          <button onClick={() => removeMember(slot.slot_id)} className="text-gray-300 hover:text-red-500 text-xs" title="Remove">✕</button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            )}
           </div>
         )}
 
-        {/* AUCTIONS TAB */}
+        {/* HISTORY TAB — Date | Month | Bid Amount | Disc/Slot | Saved */}
+        {tab === 'history' && (
+          <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+            {allAuctions.length === 0 ? (
+              <div className="p-6 text-center text-gray-400 text-sm">No auctions recorded yet</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100 bg-gray-50">
+                      <th className="px-3 py-2 text-left text-xs text-gray-500 font-medium whitespace-nowrap">Date</th>
+                      <th className="px-3 py-2 text-center text-xs text-gray-500 font-medium whitespace-nowrap">Month</th>
+                      <th className="px-3 py-2 text-right text-xs text-gray-500 font-medium whitespace-nowrap">Bid Amount</th>
+                      <th className="px-3 py-2 text-right text-xs text-gray-500 font-medium whitespace-nowrap">Disc/Slot</th>
+                      <th className="px-3 py-2 text-right text-xs text-gray-500 font-medium whitespace-nowrap">Saved</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {allAuctions.map(a => (
+                      <tr key={a.auction_id} className="border-b border-gray-50 last:border-0">
+                        <td className="px-3 py-2.5 text-xs text-gray-600 whitespace-nowrap">{formatDate(a.auction_date)}</td>
+                        <td className="px-3 py-2.5 text-center text-xs font-medium text-gray-700">M{a.month_no}</td>
+                        <td className="px-3 py-2.5 text-right font-medium">{formatCurrency(a.bid_amount)}</td>
+                        <td className="px-3 py-2.5 text-right text-indigo-600">{formatCurrency(a.member_discount_per_slot)}</td>
+                        <td className="px-3 py-2.5 text-right text-green-600">{formatCurrency(a.saved_commission_out || 0)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* AUCTIONS TAB — month-wise cards */}
         {tab === 'auctions' && (
           <div className="space-y-2">
             {allAuctions.length === 0 ? (
