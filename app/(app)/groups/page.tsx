@@ -2,12 +2,16 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { formatCurrency, statusColor, getCurrentMonthNo } from '@/lib/utils'
 
 export default function GroupsPage() {
+  const router = useRouter()
   const [groups, setGroups] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [showRecordModal, setShowRecordModal] = useState(false)
+  const [selectedGroupForRecord, setSelectedGroupForRecord] = useState('')
 
   useEffect(() => { loadGroups() }, [])
 
@@ -43,12 +47,52 @@ export default function GroupsPage() {
     <div className="p-4 space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-gray-800">Groups</h2>
-        <Link href="/groups/new">
-          <button className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-medium shadow">
-            + Add Group
+        <div className="flex gap-2">
+          <button
+            onClick={() => { setSelectedGroupForRecord(''); setShowRecordModal(true) }}
+            className="bg-green-600 text-white px-4 py-2 rounded-xl text-sm font-medium shadow"
+          >
+            🔨 Record Payment
           </button>
-        </Link>
+          <Link href="/groups/new">
+            <button className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-medium shadow">
+              + Add Group
+            </button>
+          </Link>
+        </div>
       </div>
+
+      {/* Record Payment popup */}
+      {showRecordModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={() => setShowRecordModal(false)}>
+          <div className="bg-white rounded-t-3xl w-full p-6 space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-gray-800">Record Auction</h3>
+              <button onClick={() => setShowRecordModal(false)} className="text-gray-400 text-2xl leading-none">✕</button>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Select Group</label>
+              <select
+                value={selectedGroupForRecord}
+                onChange={e => setSelectedGroupForRecord(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 text-sm"
+              >
+                <option value="">Select group...</option>
+                {groups.filter(g => g.status === 'Active').map(g => (
+                  <option key={g.group_id} value={g.group_id}>{g.group_name}</option>
+                ))}
+              </select>
+            </div>
+            <button
+              onClick={() => { if (selectedGroupForRecord) router.push(`/auctions?group=${selectedGroupForRecord}`) }}
+              disabled={!selectedGroupForRecord}
+              className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold text-lg disabled:opacity-40"
+            >
+              🔨 Proceed to Record Auction
+            </button>
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <div className="text-center py-8 text-gray-400">Loading...</div>

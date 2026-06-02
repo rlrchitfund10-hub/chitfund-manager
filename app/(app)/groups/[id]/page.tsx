@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { formatCurrency, statusColor, getCurrentMonthNo, formatDate } from '@/lib/utils'
+import { formatCurrency, getCurrentMonthNo, formatDate } from '@/lib/utils'
 
 export default function GroupDetailPage() {
   const { id } = useParams()
@@ -222,12 +222,6 @@ export default function GroupDetailPage() {
         </div>
       </div>
 
-      {/* Actions */}
-      <div className="mx-4 mb-4">
-        <button onClick={openAddPanel} className="w-full border-2 border-indigo-600 text-indigo-600 py-3 rounded-xl font-medium text-sm">
-          + Add Members
-        </button>
-      </div>
 
       {/* ═══ ADD MEMBERS PANEL ═══ */}
       {showAddPanel && (
@@ -349,19 +343,19 @@ export default function GroupDetailPage() {
       )}
 
       {/* Tabs — 4 buttons */}
-      <div className="mx-4 flex border-b border-gray-200 mb-3 overflow-x-auto">
+      <div className="mx-4 flex border-b border-gray-200 mb-3">
         {([
           { key: 'members', label: `Members (${members.length})` },
           { key: 'history', label: 'History' },
           { key: 'auctions', label: `Auctions (${allAuctions.length})` },
         ] as const).map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
-            className={`px-3 py-2 text-xs font-medium border-b-2 whitespace-nowrap ${tab === t.key ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500'}`}>
+            className={`flex-1 py-3 text-sm font-semibold border-b-2 whitespace-nowrap ${tab === t.key ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500'}`}>
             {t.label}
           </button>
         ))}
         <Link href={`/auctions?group=${id}`}
-          className="px-3 py-2 text-xs font-medium border-b-2 border-transparent text-indigo-600 whitespace-nowrap ml-auto">
+          className="py-3 px-3 text-sm font-semibold border-b-2 border-transparent text-indigo-600 whitespace-nowrap">
           🔨 Record
         </Link>
       </div>
@@ -415,6 +409,11 @@ export default function GroupDetailPage() {
                 </tbody>
               </table>
             )}
+            <div className="p-4 border-t border-gray-100">
+              <button onClick={openAddPanel} className="w-full border-2 border-indigo-600 text-indigo-600 py-3 rounded-xl font-semibold text-sm">
+                + Add Members
+              </button>
+            </div>
           </div>
         )}
 
