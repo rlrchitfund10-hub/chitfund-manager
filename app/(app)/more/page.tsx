@@ -5,6 +5,7 @@ const moreItems = [
   { href: '/overdue', icon: '⚠️', label: 'Overdue List', desc: 'Members with pending dues' },
   { href: '/float', icon: '💼', label: 'Admin Float', desc: 'Track advance payments to winners' },
   { href: '/history', icon: '📜', label: 'Payment History', desc: 'All recorded payments' },
+  { href: '/profile', icon: '👤', label: 'Profile Details', desc: 'View and edit your profile' },
 ]
 
 export default function MorePage() {

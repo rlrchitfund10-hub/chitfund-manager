@@ -8,7 +8,8 @@ const navItems = [
   { href: '/dashboard', icon: '🏠', label: 'Home' },
   { href: '/members', icon: '👥', label: 'Members' },
   { href: '/groups', icon: '📋', label: 'Groups' },
-  { href: '/more', icon: '📜', label: 'History' },
+  { href: '/history', icon: '📜', label: 'History' },
+  { href: '/more', icon: '⋯', label: 'More' },
 ]
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -48,7 +49,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           {navItems.map((item) => {
             const isActive =
               item.href === '/more'
-                ? ['/auctions', '/overdue', '/more'].some(p => pathname.startsWith(p))
+                ? ['/auctions', '/overdue', '/more', '/float', '/profile'].some(p => pathname.startsWith(p))
                 : pathname.startsWith(item.href)
             return (
               <Link
