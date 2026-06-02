@@ -67,10 +67,78 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const db = createAdminClient()
   const { id } = await params
   try {
+    // 1. Fetch auction context before deleting
+    const { data: auction, error: fetchErr } = await db
+      .from('auctions')
+      .select('group_id, month_no, winner_member_id, winner2_member_id')
+      .eq('auction_id', id)
+      .single()
+    if (fetchErr || !auction) throw new Error('Auction not found')
+
+    // 2. Get group's base installment to restore expected amounts
+    const { data: group } = await db
+      .from('groups')
+      .select('base_installment')
+      .eq('group_id', auction.group_id)
+      .single()
+    const baseInstallment = Number(group?.base_installment || 0)
+
+    // 3. Reset monthly_ledger expected amounts for that month back to base for all members
+    const { data: allSlots } = await db
+      .from('member_slots')
+      .select('member_id, slot_count')
+      .eq('group_id', auction.group_id)
+
+    for (const slot of (allSlots || [])) {
+      const baseExpected = baseInstallment * Number(slot.slot_count)
+      const { data: ledger } = await db
+        .from('monthly_ledger')
+        .select('ledger_id, paid_amount')
+        .eq('member_id', slot.member_id)
+        .eq('group_id', auction.group_id)
+        .eq('month_no', auction.month_no)
+        .maybeSingle()
+      if (ledger) {
+        const paid = Number(ledger.paid_amount)
+        const balance = baseExpected - paid
+        await db.from('monthly_ledger').update({
+          expected_amount: baseExpected,
+          balance,
+          status: balance <= 0 ? 'Paid' : 'Pending',
+        }).eq('ledger_id', ledger.ledger_id)
+      }
+    }
+
+    // 4. Reset winner slot(s) back to Active
+    await resetWinnerSlot(db, auction.winner_member_id, auction.group_id, auction.month_no)
+    if (auction.winner2_member_id) {
+      await resetWinnerSlot(db, auction.winner2_member_id, auction.group_id, auction.month_no)
+    }
+
+    // 5. Delete the auction
     const { error } = await db.from('auctions').delete().eq('auction_id', id)
     if (error) throw new Error(error.message)
+
     return NextResponse.json({ success: true })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })
+  }
+}
+
+async function resetWinnerSlot(db: any, memberId: string, groupId: string, monthNo: number) {
+  const { data: slots } = await db
+    .from('member_slots')
+    .select('slot_id')
+    .eq('member_id', memberId)
+    .eq('group_id', groupId)
+    .eq('won_month_no', monthNo)
+    .limit(1)
+  if (slots?.length) {
+    await db.from('member_slots').update({
+      has_won: 'No',
+      status: 'Active',
+      won_month_no: null,
+      won_payout: null,
+    }).eq('slot_id', slots[0].slot_id)
   }
 }
