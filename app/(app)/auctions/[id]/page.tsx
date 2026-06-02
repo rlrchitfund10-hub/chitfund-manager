@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { formatCurrency, getCurrentMonthNo } from '@/lib/utils'
+import { formatCurrency } from '@/lib/utils'
 
 export default function EditAuctionPage() {
   const { id } = useParams()
@@ -249,22 +249,7 @@ export default function EditAuctionPage() {
           <p className="text-xs text-blue-600 mt-1">Auto-loaded from previous month — edit only if needed</p>
         </div>
 
-        {/* Shared Discount */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Shared Discount (₹) * <span className="text-gray-400 text-xs">— amount shared with all members</span>
-          </label>
-          <input type="number" value={form.shared_discount} onChange={e => update('shared_discount', e.target.value)}
-            placeholder="Enter amount to share"
-            className="w-full px-4 py-3 border-2 border-indigo-300 rounded-xl bg-indigo-50 text-sm font-medium" />
-          {sharedDiscount > 0 && group && (
-            <p className="text-xs text-indigo-600 mt-1 font-medium">
-              Each member discount: {formatCurrency(discountPerSlot)} per slot
-            </p>
-          )}
-        </div>
-
-        {/* Live calculation breakdown */}
+        {/* Sum calculation — shown before shared discount input */}
         {bid > 0 && group && (
           <div className="bg-gray-50 rounded-xl p-3 space-y-1.5 border border-gray-200 text-sm">
             <div className="flex justify-between">
@@ -276,19 +261,43 @@ export default function EditAuctionPage() {
               <span className="font-medium">{formatCurrency(savedIn)}</span>
             </div>
             <div className="flex justify-between border-t border-gray-200 pt-1.5">
-              <span className="text-gray-500">= Total Available</span>
+              <span className="text-gray-600 font-medium">= Total Available</span>
               <span className="font-semibold">{formatCurrency(totalAvailable)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">− Admin Commission ({group.commission_pct}%)</span>
               <span className="font-medium text-red-500">−{formatCurrency(adminCommission)}</span>
             </div>
+            <div className="flex justify-between border-t border-gray-200 pt-1.5">
+              <span className="text-gray-600 font-medium">= Net Pool</span>
+              <span className="font-semibold text-gray-800">{formatCurrency(netPool)}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Shared Discount — after sum calculation */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Shared Discount (₹) * <span className="text-gray-400 text-xs">— amount shared with all members</span>
+          </label>
+          <input type="number" value={form.shared_discount} onChange={e => update('shared_discount', e.target.value)}
+            placeholder="Enter amount to share"
+            className="w-full px-4 py-3 border-2 border-indigo-300 rounded-xl bg-indigo-50 text-sm font-medium" />
+        </div>
+
+        {/* Results: discount per slot + saved next month */}
+        {sharedDiscount > 0 && group && (
+          <div className="bg-gray-50 rounded-xl p-3 space-y-1.5 border border-gray-200 text-sm">
             <div className="flex justify-between">
               <span className="text-gray-500">− Shared Discount</span>
               <span className="font-medium text-orange-500">−{formatCurrency(sharedDiscount)}</span>
             </div>
+            <div className="flex justify-between">
+              <span className="text-indigo-700 font-medium">Discount per Slot</span>
+              <span className="font-semibold text-indigo-700">{formatCurrency(discountPerSlot)}</span>
+            </div>
             <div className={`flex justify-between border-t border-gray-200 pt-1.5 font-semibold ${savedForNext >= 0 ? 'text-green-700' : 'text-red-600'}`}>
-              <span>= Saved → Next Month</span>
+              <span>Saved =</span>
               <span>{formatCurrency(savedForNext)}</span>
             </div>
           </div>

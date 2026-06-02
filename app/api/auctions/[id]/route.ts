@@ -41,6 +41,22 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       }
     }
 
+    // Cascade saved_commission_out to next month's saved_commission_in if that auction exists
+    if (body.saved_commission_out !== undefined && body.group_id && body.month_no) {
+      const nextMonthNo = parseInt(body.month_no) + 1
+      const { data: nextAuction } = await db
+        .from('auctions')
+        .select('auction_id')
+        .eq('group_id', body.group_id)
+        .eq('month_no', nextMonthNo)
+        .single()
+      if (nextAuction) {
+        await db.from('auctions')
+          .update({ saved_commission_in: body.saved_commission_out })
+          .eq('auction_id', nextAuction.auction_id)
+      }
+    }
+
     return NextResponse.json({ success: true })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })
