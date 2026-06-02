@@ -472,11 +472,14 @@ export default function GroupDetailPage() {
                     <p className="font-semibold text-gray-800">Month {a.month_no}</p>
                     <p className="text-xs text-gray-500">{formatDate(a.auction_date)} • Winner: {a.winner_name}</p>
                   </div>
-                  <div className="text-right flex-shrink-0">
-                    <p className="font-bold text-green-700">{formatCurrency(a.net_payout)}</p>
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${a.payout_status === 'Paid' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
-                      {a.payout_status}
-                    </span>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <div className="text-right">
+                      <p className="font-bold text-green-700">{formatCurrency(a.net_payout)}</p>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${a.payout_status === 'Paid' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+                        {a.payout_status}
+                      </span>
+                    </div>
+                    <span className="text-gray-400 text-sm">{expandedAuction === a.auction_id ? '▲' : '▼'}</span>
                   </div>
                 </button>
 

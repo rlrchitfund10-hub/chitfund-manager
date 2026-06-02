@@ -65,7 +65,7 @@ export default function GroupsPage() {
       {/* Record Payment popup */}
       {showRecordModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={() => setShowRecordModal(false)}>
-          <div className="bg-white rounded-t-3xl w-full p-6 space-y-4" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-t-3xl w-full px-6 pt-6 pb-24 space-y-4" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-bold text-gray-800">Record Auction</h3>
               <button onClick={() => setShowRecordModal(false)} className="text-gray-400 text-2xl leading-none">✕</button>

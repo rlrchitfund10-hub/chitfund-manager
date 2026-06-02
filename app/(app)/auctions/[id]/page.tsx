@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, formatDate } from '@/lib/utils'
 
 export default function EditAuctionPage() {
   const { id } = useParams()
@@ -193,6 +193,7 @@ export default function EditAuctionPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Auction Date</label>
             <input type="date" value={form.auction_date} onChange={e => update('auction_date', e.target.value)}
               className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 text-sm" />
+            {form.auction_date && <p className="text-xs text-gray-400 mt-1">{formatDate(form.auction_date)}</p>}
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Month No</label>
@@ -311,22 +312,6 @@ export default function EditAuctionPage() {
           <div className="flex justify-between items-center bg-purple-50 rounded-xl px-4 py-3 mb-3">
             <span className="text-purple-700 font-medium">Gross Payout to Winner</span>
             <span className="font-bold text-purple-700 text-xl">{formatCurrency(grossPayout)}</span>
-          </div>
-
-          {/* Deduction */}
-          <div className="mb-3">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Deduction from Winner
-              {winnerDues > 0 && <span className="text-red-500 ml-1 text-xs">(dues: {formatCurrency(winnerDues)})</span>}
-            </label>
-            <input type="number" value={form.deduction_amount} onChange={e => update('deduction_amount', e.target.value)}
-              className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 text-sm" />
-            {winnerDues > 0 && (
-              <button onClick={() => update('deduction_amount', String(Math.round(winnerDues)))}
-                className="mt-1 text-xs text-indigo-600">
-                Deduct full dues ({formatCurrency(winnerDues)})
-              </button>
-            )}
           </div>
 
           {/* Net payout */}

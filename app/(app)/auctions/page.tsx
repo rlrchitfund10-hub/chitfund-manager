@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { Suspense } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { formatCurrency, getCurrentMonthNo } from '@/lib/utils'
+import { formatCurrency, getCurrentMonthNo, formatDate } from '@/lib/utils'
 
 function AuctionForm() {
   const searchParams = useSearchParams()
@@ -226,6 +226,7 @@ function AuctionForm() {
               type="date" value={form.auction_date} onChange={e => update('auction_date', e.target.value)}
               className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 text-sm"
             />
+            {form.auction_date && <p className="text-xs text-gray-400 mt-1">{formatDate(form.auction_date)}</p>}
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -354,36 +355,6 @@ function AuctionForm() {
         </div>
       )}
 
-      {/* Deduction */}
-      {canCalculate && (
-        <div className="bg-white rounded-2xl p-4 shadow-sm space-y-3">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Deduction from Winner
-              {winnerDues > 0 && <span className="text-red-500 ml-1 text-xs">(dues: {formatCurrency(winnerDues)})</span>}
-            </label>
-            <input
-              type="number" value={form.deduction_amount} onChange={e => update('deduction_amount', e.target.value)}
-              placeholder="0"
-              className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 text-sm"
-            />
-            {winnerDues > 0 && (
-              <button
-                onClick={() => update('deduction_amount', String(Math.round(winnerDues)))}
-                className="mt-1 text-xs text-indigo-600"
-              >
-                Deduct full dues ({formatCurrency(winnerDues)})
-              </button>
-            )}
-          </div>
-
-          {/* Net Payout */}
-          <div className="bg-indigo-600 text-white rounded-xl px-4 py-4 flex justify-between items-center">
-            <span className="font-bold">Net Payout to Winner</span>
-            <span className="font-bold text-2xl">{formatCurrency(netPayout)}</span>
-          </div>
-        </div>
-      )}
 
       {/* Shared slot split */}
       {canCalculate && isHalfSlot && (
