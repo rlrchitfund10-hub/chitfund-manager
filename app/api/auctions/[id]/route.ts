@@ -83,14 +83,13 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
       .single()
     const baseInstallment = Number(group?.base_installment || 0)
 
-    // 3. Reset monthly_ledger expected amounts for that month back to base for all members
+    // 3. Clean up monthly_ledger entries for that month
     const { data: allSlots } = await db
       .from('member_slots')
       .select('member_id, slot_count')
       .eq('group_id', auction.group_id)
 
     for (const slot of (allSlots || [])) {
-      const baseExpected = baseInstallment * Number(slot.slot_count)
       const { data: ledger } = await db
         .from('monthly_ledger')
         .select('ledger_id, paid_amount')
@@ -98,8 +97,15 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
         .eq('group_id', auction.group_id)
         .eq('month_no', auction.month_no)
         .maybeSingle()
-      if (ledger) {
-        const paid = Number(ledger.paid_amount)
+      if (!ledger) continue
+
+      const paid = Number(ledger.paid_amount)
+      if (paid === 0) {
+        // Entry was created by the auction with no payments — remove it entirely
+        await db.from('monthly_ledger').delete().eq('ledger_id', ledger.ledger_id)
+      } else {
+        // Member already paid something — keep the record but restore base expected amount
+        const baseExpected = baseInstallment * Number(slot.slot_count)
         const balance = baseExpected - paid
         await db.from('monthly_ledger').update({
           expected_amount: baseExpected,
