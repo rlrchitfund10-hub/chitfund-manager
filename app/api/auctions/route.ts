@@ -21,6 +21,20 @@ export async function POST(req: NextRequest) {
 
     const auctionId = generateId('AUC')
 
+    // Check if auction already exists for this group + month
+    const { data: existing } = await db
+      .from('auctions')
+      .select('auction_id')
+      .eq('group_id', group_id)
+      .eq('month_no', month_no)
+      .maybeSingle()
+    if (existing) {
+      return NextResponse.json(
+        { error: `An auction for month ${month_no} has already been recorded for this group.` },
+        { status: 409 }
+      )
+    }
+
     // 1. Insert auction
     const { error: aErr } = await db.from('auctions').insert({
       auction_id: auctionId,
@@ -36,7 +50,15 @@ export async function POST(req: NextRequest) {
       winner2_payout: winner2_payout || null,
       notes: notes || null,
     })
-    if (aErr) throw new Error(aErr.message)
+    if (aErr) {
+      if (aErr.code === '23505') {
+        return NextResponse.json(
+          { error: `An auction for month ${month_no} has already been recorded for this group.` },
+          { status: 409 }
+        )
+      }
+      throw new Error(aErr.message)
+    }
 
     // 2. Mark winner's slot as Won
     await markWinnerSlot(db, winner_member_id, group_id, month_no, net_payout)
