@@ -37,23 +37,36 @@ function AuctionForm() {
   const [isHalfSlot, setIsHalfSlot] = useState(false)
 
   useEffect(() => { loadInitial() }, [])
-  useEffect(() => { if (selectedGroup) loadGroupDetails(selectedGroup) }, [selectedGroup])
+  useEffect(() => {
+    if (selectedGroup) {
+      setMembers([])
+      update('winner_member_id', '')
+      loadGroupDetails(selectedGroup)
+    }
+  }, [selectedGroup])
   useEffect(() => { if (form.winner_member_id && selectedGroup) { loadWinnerDues(); checkHalfSlot() } }, [form.winner_member_id, selectedGroup])
 
   async function loadInitial() {
     const db = createClient()
-    const [{ data: g }, { data: m }] = await Promise.all([
-      db.from('groups').select('*').eq('status', 'Active').order('group_name'),
-      db.from('members').select('member_id, full_name').eq('status', 'Active').order('full_name'),
-    ])
+    const { data: g } = await db.from('groups').select('*').eq('status', 'Active').order('group_name')
     setGroups(g || [])
-    setMembers(m || [])
   }
 
   async function loadGroupDetails(groupId: string) {
     const db = createClient()
     const { data } = await db.from('groups').select('*').eq('group_id', groupId).single()
     setGroupDetails(data)
+
+    // Load only members who belong to this group
+    const { data: slots } = await db.from('member_slots').select('member_id').eq('group_id', groupId).eq('status', 'Active')
+    const memberIds = (slots || []).map((s: any) => s.member_id)
+    if (memberIds.length > 0) {
+      const { data: md } = await db.from('members').select('member_id, full_name').in('member_id', memberIds).order('full_name')
+      setMembers(md || [])
+    } else {
+      setMembers([])
+    }
+
     if (data) await fetchSavedCommission(groupId, data)
   }
 
