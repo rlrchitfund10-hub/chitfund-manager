@@ -62,3 +62,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
 }
+
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const db = createAdminClient()
+  const { id } = await params
+  try {
+    const { error } = await db.from('auctions').delete().eq('auction_id', id)
+    if (error) throw new Error(error.message)
+    return NextResponse.json({ success: true })
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 })
+  }
+}

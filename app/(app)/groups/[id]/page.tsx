@@ -143,6 +143,24 @@ export default function GroupDetailPage() {
     if (res.ok) await loadGroup()
   }
 
+  async function markAsPaid(auctionId: string, netPayout: number, winnerName: string) {
+    if (!confirm(`Mark ${formatCurrency(netPayout)} as paid to ${winnerName}?`)) return
+    const res = await fetch('/api/auctions', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ auction_id: auctionId, payout_status: 'Paid', payout_date: new Date().toISOString().split('T')[0] }),
+    })
+    if (res.ok) await loadGroup()
+    else alert('Failed to update payout status')
+  }
+
+  async function deleteAuction(auctionId: string, monthNo: number) {
+    if (!confirm(`Delete Month ${monthNo} auction? This cannot be undone.`)) return
+    const res = await fetch(`/api/auctions/${auctionId}`, { method: 'DELETE' })
+    if (res.ok) { setExpandedAuction(null); await loadGroup() }
+    else alert('Failed to delete auction')
+  }
+
   async function saveEditAuction() {
     if (!editingAuction) return
     setEditSaving(true)
@@ -498,15 +516,26 @@ export default function GroupDetailPage() {
                       <div><span className="text-gray-500">Gross Payout</span><p className="font-semibold">{formatCurrency(a.gross_payout)}</p></div>
                       <div><span className="text-gray-500">Deduction</span><p className="font-medium text-red-500">{formatCurrency(a.deduction_amount)}</p></div>
                     </div>
-                    <div className="bg-indigo-600 text-white rounded-xl px-4 py-2.5 flex justify-between items-center">
-                      <span className="font-bold">Net Payout</span>
-                      <span className="font-bold text-xl">{formatCurrency(a.net_payout)}</span>
-                    </div>
+                    <button
+                      onClick={() => { if (a.payout_status !== 'Paid') markAsPaid(a.auction_id, a.net_payout, a.winner_name) }}
+                      className={`w-full rounded-xl px-4 py-2.5 flex justify-between items-center transition-opacity ${a.payout_status === 'Paid' ? 'bg-green-600 cursor-default' : 'bg-indigo-600 active:opacity-80'}`}
+                    >
+                      <span className="font-bold text-white text-sm">
+                        {a.payout_status === 'Paid' ? '✓ Paid — Amount Received' : 'Net Payout — Tap to Mark Paid'}
+                      </span>
+                      <span className="font-bold text-xl text-white">{formatCurrency(a.net_payout)}</span>
+                    </button>
                     <Link href={`/auctions/${a.auction_id}`}>
                       <button className="w-full border border-indigo-600 text-indigo-600 py-2 rounded-xl text-sm font-medium">
                         ✏️ Edit This Auction — Full Form
                       </button>
                     </Link>
+                    <button
+                      onClick={() => deleteAuction(a.auction_id, a.month_no)}
+                      className="w-full border border-red-200 text-red-500 py-2 rounded-xl text-sm font-medium"
+                    >
+                      🗑 Delete Auction
+                    </button>
                   </div>
                 )}
 
